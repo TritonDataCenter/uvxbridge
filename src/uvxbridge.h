@@ -20,75 +20,75 @@ enum value_type {
  * - UPDATE_FTE:<seqno> mac: big-endian 6 bytes
  *                raddr: <4-tuple| v6addr w/ no symbolic>
  *             expire: 8 bytes - useconds
- *         (result:<seqno (gen: 4 byte))
+ *         (result:seqno error:<errstr> (gen: 4 byte)?)
  *
  *  Get forwarding entry details
  * - GET_FTE:<seqno> big-endian 6 bytes
- *       (result:<seqno> (raddr: <4-tuple| v6addr w/ no symbolic>
+ *       (result:<seqno> error:<errstr> (raddr: <4-tuple| v6addr w/ no symbolic>
  *              expire: 8 bytes - useconds
- *                 gen: 4 byte))
+ *                 gen: 4 byte)?)
  * 
  * - REMOVE_FTE:<seqno> vxmac: big-endian 6 bytes
- *       (result:<seqno>)
+ *       (result:<seqno> error:<errstr>)
  *
  * - GET_ALL_FTE:<seqno>
- *         (result: (mac: big-endian 6 bytes
+ *         (result: error:<errstr> (mac: big-endian 6 bytes
  *                 raddr: <4-tuple| v6addr w/ no symbolic>
  *                expire: 8 bytes - useconds
  *                   gen: 4 byte)*)  
  *
  *   manage physical L2 table entries for remote IP
  * - SET_PHYS_ND:<seqno> mac: big-endian 6 bytes raddr: <4-tuple| v6addr w/ no symbolic>
- *   (result:<seqno>)
+ *   (result:<seqno> error:<errstr>)
  *
  * - DEL_PHYS_ND:<seqno> mac: big-endian 6 bytes | raddr: <4-tuple| v6addr w/ no symbolic>
- *   (result:<seqno>)
+ *   (result:<seqno> error:<errstr>)
  *
  * - GET_PHYS_ND:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
- *      (result:<seqno>  (mac: big-endian 6 bytes))
+ *      (result:<seqno>  error:<errstr> (mac: big-endian 6 bytes)?)
  *
  * - GET_ALL_PHYS_ND:<seqno>
- *       (result:<seqno> (mac: big-endian 6 bytes
+ *       (result:<seqno> error:<errstr> (mac: big-endian 6 bytes
  *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
  *
  *   manage vxlan L2 table entries for remote IP
  * - SET_VX_ND:<seqno> mac: big-endian 6 bytes raddr: <4-tuple| v6addr w/ no symbolic>
- *   (result:<seqno>)
+ *   (result:<seqno> error:<errstr>)
  *
  * - DEL_VX_ND:<seqno> mac: big-endian 6 bytes |
  *             raddr: <4-tuple| v6addr w/ no symbolic>
- *   (result:<seqno>)
+ *   (result:<seqno> error:<errstr>)
  *
  * - GET_VX_ND:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
- *      (result:<seqno>  (mac: big-endian 6 bytes))
+ *      (result:<seqno> error:<errstr> (mac: big-endian 6 bytes)?)
  *
  * - GET_ALL_VX_ND:<seqno>
- *       (result:<seqno> (mac: big-endian 6 bytes
+ *       (result:<seqno> error:<errstr> (mac: big-endian 6 bytes
  *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
  *
  *   map 5-byte local VM mac to vlanid|vxlanid
  * - UPDATE_VM_VNI:<seqno> vlanid: 2-bytes vxlanid: 3-bytes mac: 6-bytes
- *     (result:<seqno>  (gen: 4 byte))
+ *     (result:<seqno> error:<errstr> (gen: 4 byte))
  *
  * - GET_VM_VNI:<seqno> mac: 6-bytes
- *       (result:<seqno>   (vlanid: 2-bytes
+ *       (result:<seqno> error:<errstr> (vlanid: 2-bytes
  *              vxlanid: 3-bytes
  *                  gen: 4 byte))
  *
  * - REMOVE_VM_VNI:<seqno> mac: big-endian 6 bytes
- *       (result:<seqno>)
+ *       (result:<seqno> error:<errstr>)
  *
  * - GET_ALL_VM_VNI:<seqno>
- *       (result:<seqno>   (mac: 6 bytes 
+ *       (result:<seqno>  error:<errstr> (mac: 6 bytes 
  *              vlanid: 2-bytes
  *              vxlanid: 3-bytes
  *                  gen: 4 byte)*)
  *
  * - UPDATE_DEFAULT_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
- *       (result:<seqno> (gen: 4 bytes))
+ *       (result:<seqno> error:<errstr> (gen: 4 bytes)?)
  *
  * - REMOVE_DEFAULT_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
- *       (result:<seqno>)
+ *       (result:<seqno> error:<errstr>)
  *
  */
 
@@ -119,6 +119,13 @@ enum verb {
 	VERB_GET_ALL_VX_ND = 0x43
 };
 
+enum verb_error {
+		ERR_SUCCESS,
+		ERR_PARSE,
+		ERR_INCOMPLETE,
+		ERR_NOENTRY
+};
+
 
 
 typedef struct parse_value {
@@ -144,7 +151,6 @@ typedef struct vxlan_ftable_entry {
 		uint64_t vfe_v6:1;
 		uint64_t vfe_gen:15;
 		uint64_t vfe_expire:48;
-		vxlan_ftable_entry(char *, uint64_t);
 } vfe_t;
 
 typedef pair<string, pv_t> cmdent;
