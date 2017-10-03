@@ -9,11 +9,18 @@
 #include <arpa/inet.h>
 #include "uvxbridge.h"
 
+#define ERRENT(error) #error
+static const char *err_list[] = {
+		ERRENT(ERR_SUCCESS),
+		ERRENT(ERR_PARSE),
+		ERRENT(ERR_INCOMPLETE),
+		ERRENT(ERR_NOENTRY)
+};
+
 enum value_type {
 	TAG_NUMERIC = 0x1,
 	TAG_STRING = 0x2
 };
-
 typedef struct parse_value {
 		enum value_type tag;
 		int pad0;
@@ -61,8 +68,8 @@ cmdmap_get_str(cmdmap_t &map, const char *key, char **val)
 static string
 default_result(uint64_t seqno)
 {
-		char buf[32];
-		snprintf(buf, 32, "(result:0x%lX)", seqno);
+		char buf[64];
+		snprintf(buf, 32, "(result:0x%lX error:%s)", seqno, err_list[ERR_SUCCESS]);
 		return string(buf);
 }
 
