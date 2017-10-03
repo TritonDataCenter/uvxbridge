@@ -66,11 +66,25 @@ cmdmap_get_str(cmdmap_t &map, const char *key, char **val)
 }
 
 static string
-default_result(uint64_t seqno)
+dflt_result(uint64_t seqno, enum verb_error err)
 {
 		char buf[64];
-		snprintf(buf, 32, "(result:0x%lX error:%s)", seqno, err_list[ERR_SUCCESS]);
+
+		snprintf(buf, 64, "(result:0x%lX error:%s)", seqno, err_list[err]);
 		return string(buf);
+}
+
+static string
+gen_result(uint64_t seqno, enum verb_error err, string input)
+{
+		int len = input.size() + 64;
+		char *buf;
+		if ((buf = static_cast<char *>(malloc(len))) == NULL)
+				return dflt_result(seqno, ERR_NOMEM);
+		snprintf(buf, len, "(result:0x%lX error:%s %s)", seqno, err_list[err], input.c_str());
+		auto s = string(buf);
+		free(buf);
+		return s;
 }
 
 parse_value::parse_value(uint64_t numeric)
@@ -97,25 +111,51 @@ parse_value::~parse_value()
 }
 
 typedef int (*cmdhandler_t)(cmdmap_t &map, uint64_t seqno, vxstate_t&, string&);
+#define s6_addr32 __u6_addr.__u6_addr32
 
 static int
 fte_fill(vfe_t *fe, char *ip, uint64_t expire)
 {
 		int is_v6 = (index(ip, ':') != NULL);
-		fe->vfe_gen++;
 		fe->vfe_expire = expire;
 		if (is_v6) {
+				struct in6_addr	in6;
+				uint32_t *pin6dst, *pin6src;
+
 				fe->vfe_v6 = 1;
-				if (inet_pton(AF_INET6, ip, &fe->vfe_raddr.in6)) {
+				if (inet_pton(AF_INET6, ip, &in6))
 						return EINVAL;
-				}
+				pin6dst = fe->vfe_raddr.in6.s6_addr32;
+				pin6src = in6.s6_addr32;
+				for (int i = 0; i < 4; i++)
+						pin6dst[i] = htonl(pin6src[i]);
 		} else {
+				struct in_addr	in4;
+
 				fe->vfe_v6 = 0;
-				if (inet_aton(ip, &fe->vfe_raddr.in4)) {
+				if (inet_aton(ip, &in4))
 						return EINVAL;
-				}
+				fe->vfe_raddr.in4.s_addr = htonl(in4.s_addr);
 		}
 		return 0;
+}
+
+static string
+format_map(cmdmap_t &map)
+{
+		string result = string("( ");
+		char buf[64];
+		for (auto it = map.begin(); it != map.end(); it++) {
+				if (it->second.tag == TAG_NUMERIC)
+						snprintf(buf, 64, "%s:0x%lX ", it->first.c_str(),
+								 it->second.value.numeric);
+				else
+						snprintf(buf, 64, "%s:\"%s\"", it->first.c_str(),
+								 it->second.value.text);
+				result.append(buf);
+		}
+		result.append(")");
+		return result;
 }
 
 static int
@@ -123,32 +163,46 @@ fte_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &resu
 {
 		uint64_t mac, expire;
 		char *ip;
-		int gen;
+		int gen = 0;
+		cmdmap_t result_map;
+		enum verb_error err = ERR_INCOMPLETE;
 
-		if (cmdmap_get_num(map, "mac", mac))
+		if (cmdmap_get_num(map, "mac", mac)) {
+				result = dflt_result(seqno, err);
 				return EINVAL;
-		if (cmdmap_get_num(map, "expire", expire))
-				return EINVAL;
-		if (cmdmap_get_str(map, "raddr", &ip))
-				return EINVAL;
+		}
 		auto it = state.vs_ftable.find(mac);
+		if (cmdmap_get_num(map, "expire", expire))
+				goto incomplete;
+		if (cmdmap_get_str(map, "raddr", &ip))
+				goto incomplete;
 		if (it == state.vs_ftable.end()) {
 				vfe_t fe;
 				if (fte_fill(&fe, ip, expire))
-						return EINVAL;
+						goto badparse;
 				state.vs_ftable.insert(fwdent(mac, fe));
 		} else {
 				auto fe = &it->second;
-				return fte_fill(fe, ip, expire);
+				fe->vfe_gen++;
+				gen = fe->vfe_gen;
+				if (fte_fill(fe, ip, expire))
+						goto badparse;
 		}
+		result_map.insert(cmdent(string("gen"), parse_value(gen)));
+		result = gen_result(seqno, ERR_SUCCESS, format_map(result_map));
 		return 0;
+badparse:
+		err = ERR_PARSE;
+incomplete:
+		result = dflt_result(seqno, err);
+		return EINVAL;
 }
 
 static int
 fte_remove_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
 
-		result = default_result(seqno);
+		result = dflt_result(seqno, ERR_SUCCESS);
 		return 0;
 }
 

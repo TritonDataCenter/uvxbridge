@@ -112,6 +112,7 @@ enum verb_error {
 		ERR_SUCCESS = 0,
 		ERR_PARSE,
 		ERR_INCOMPLETE,
+		ERR_NOMEM,
 		ERR_NOENTRY
 };
 
