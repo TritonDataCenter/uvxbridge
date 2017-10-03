@@ -9,6 +9,11 @@
 #include <arpa/inet.h>
 #include "uvxbridge.h"
 
+enum value_type {
+	TAG_NUMERIC = 0x1,
+	TAG_STRING = 0x2
+};
+
 typedef struct parse_value {
 		enum value_type tag;
 		int pad0;

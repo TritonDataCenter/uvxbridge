@@ -2,17 +2,6 @@
 #define SIMPLEPARSER_H_
 
 #include <netinet/in.h>
-using std::string;
-using std::pair;
-using std::map;
-
-
-
-enum value_type {
-	TAG_NUMERIC = 0x1,
-	TAG_STRING = 0x2
-};
-
 /*  
  * VERB command set
  * 
@@ -138,6 +127,10 @@ typedef struct vxlan_ftable_entry {
 		uint64_t vfe_gen:15;
 		uint64_t vfe_expire:48;
 } vfe_t;
+
+using std::string;
+using std::pair;
+using std::map;
 
 typedef pair<uint64_t, vfe_t> fwdent;
 typedef map<uint64_t, vfe_t> ftable_t;
