@@ -5,6 +5,8 @@
 #include <map>
 #include <string>
 
+#include <sys/socket.h>
+#include <arpa/inet.h>
 #include "uvxbridge.h"
 
 static int
@@ -68,7 +70,7 @@ parse_value::~parse_value()
 typedef int (*cmdhandler_t)(cmdmap_t &map, uint64_t seqno, vxstate_t&, string&);
 
 static int
-fte_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+fte_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
 		uint64_t mac, expire;
 		char *ip;
@@ -80,14 +82,29 @@ fte_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, str
 				return EINVAL;
 		if (cmdmap_get_str(map, "raddr", &ip))
 				return EINVAL;
-		auto fe = vxlan_ftable_entry(ip, expire);
 		auto it = state.vs_ftable.find(mac);
-		if (it == state.vs_ftable.end())
-				gen = 0;
-		else
-				gen = it->second.vfe_gen + 1;
-		state.vs_ftable.insert(fwdent(mac, fe));
-				
+		if (it == state.vs_ftable.end()) {
+				auto fe = vxlan_ftable_entry(ip, expire);
+				state.vs_ftable.insert(fwdent(mac, fe));
+		} else {
+				auto fe = &it->second;
+				int is_v6 = (index(ip, ':') != NULL);
+				fe->vfe_gen++;
+				fe->vfe_expire = expire;
+				if (is_v6) {
+						fe->vfe_v6 = 1;
+						if (inet_pton(AF_INET6, ip, &fe->vfe_raddr.in6)) {
+								state.vs_ftable.erase(mac);
+								return EINVAL;
+						}
+				} else {
+						fe->vfe_v6 = 0;
+						if (inet_aton(ip, &fe->vfe_raddr.in4)) {
+								state.vs_ftable.erase(mac);
+								return EINVAL;
+						}
+				}
+		}
 		return 0;
 }
 
