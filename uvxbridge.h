@@ -1,0 +1,172 @@
+#ifndef SIMPLEPARSER_H_
+#define SIMPLEPARSER_H_
+
+#include <netinet/in.h>
+using std::string;
+using std::pair;
+using std::map;
+
+
+
+enum value_type {
+	TAG_NUMERIC = 0x1,
+	TAG_STRING = 0x2
+};
+
+/*  
+ * VERB command set
+ * 
+ *   Add forwarding table entry map destination host mac to remote ip
+ * - UPDATE_FTE:<seqno> mac: big-endian 6 bytes
+ *                raddr: <4-tuple| v6addr w/ no symbolic>
+ *             expire: 8 bytes - useconds
+ *         (result:<seqno (gen: 4 byte))
+ *
+ *  Get forwarding entry details
+ * - GET_FTE:<seqno> big-endian 6 bytes
+ *       (result:<seqno> (raddr: <4-tuple| v6addr w/ no symbolic>
+ *              expire: 8 bytes - useconds
+ *                 gen: 4 byte))
+ * 
+ * - REMOVE_FTE:<seqno> vxmac: big-endian 6 bytes
+ *       (result:<seqno>)
+ *
+ * - GET_ALL_FTE:<seqno>
+ *         (result: (mac: big-endian 6 bytes
+ *                 raddr: <4-tuple| v6addr w/ no symbolic>
+ *                expire: 8 bytes - useconds
+ *                   gen: 4 byte)*)  
+ *
+ *   manage physical L2 table entries for remote IP
+ * - SET_PHYS_ND:<seqno> mac: big-endian 6 bytes raddr: <4-tuple| v6addr w/ no symbolic>
+ *   (result:<seqno>)
+ *
+ * - DEL_PHYS_ND:<seqno> mac: big-endian 6 bytes | raddr: <4-tuple| v6addr w/ no symbolic>
+ *   (result:<seqno>)
+ *
+ * - GET_PHYS_ND:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
+ *      (result:<seqno>  (mac: big-endian 6 bytes))
+ *
+ * - GET_ALL_PHYS_ND:<seqno>
+ *       (result:<seqno> (mac: big-endian 6 bytes
+ *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
+ *
+ *   manage vxlan L2 table entries for remote IP
+ * - SET_VX_ND:<seqno> mac: big-endian 6 bytes raddr: <4-tuple| v6addr w/ no symbolic>
+ *   (result:<seqno>)
+ *
+ * - DEL_VX_ND:<seqno> mac: big-endian 6 bytes |
+ *             raddr: <4-tuple| v6addr w/ no symbolic>
+ *   (result:<seqno>)
+ *
+ * - GET_VX_ND:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
+ *      (result:<seqno>  (mac: big-endian 6 bytes))
+ *
+ * - GET_ALL_VX_ND:<seqno>
+ *       (result:<seqno> (mac: big-endian 6 bytes
+ *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
+ *
+ *   map 5-byte local VM mac to vlanid|vxlanid
+ * - UPDATE_VM_VNI:<seqno> vlanid: 2-bytes vxlanid: 3-bytes mac: 6-bytes
+ *     (result:<seqno>  (gen: 4 byte))
+ *
+ * - GET_VM_VNI:<seqno> mac: 6-bytes
+ *       (result:<seqno>   (vlanid: 2-bytes
+ *              vxlanid: 3-bytes
+ *                  gen: 4 byte))
+ *
+ * - REMOVE_VM_VNI:<seqno> mac: big-endian 6 bytes
+ *       (result:<seqno>)
+ *
+ * - GET_ALL_VM_VNI:<seqno>
+ *       (result:<seqno>   (mac: 6 bytes 
+ *              vlanid: 2-bytes
+ *              vxlanid: 3-bytes
+ *                  gen: 4 byte)*)
+ *
+ * - UPDATE_DEFAULT_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
+ *       (result:<seqno> (gen: 4 bytes))
+ *
+ * - REMOVE_DEFAULT_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
+ *       (result:<seqno>)
+ *
+ */
+
+enum verb {
+	VERB_BAD = 0x0,
+
+	VERB_UPDATE_FTE = 0x2,
+	VERB_REMOVE_FTE = 0x3,
+	VERB_GET_FTE = 0x4,
+	VERB_GET_ALL_FTE = 0x5,
+
+	VERB_SET_PHYS_ND = 0x10,
+	VERB_GET_PHYS_ND = 0x11,
+	VERB_DEL_PHYS_ND = 0x12,
+	VERB_GET_ALL_PHYS_ND = 0x13,
+	
+	VERB_UPDATE_VM_VNI = 0x20,
+	VERB_REMOVE_VM_VNI = 0x21,
+	VERB_GET_VM_VNI = 0x22,
+	VERB_GET_ALL_VM_VNI = 0x23,
+
+	VERB_UPDATE_DEFAULT_ROUTE = 0x30,
+	VERB_REMOVE_DEFAULT_ROUTE = 0x31,
+
+	VERB_SET_VX_ND = 0x40,
+	VERB_GET_VX_ND = 0x41,
+	VERB_DEL_VX_ND = 0x42,
+	VERB_GET_ALL_VX_ND = 0x43
+};
+
+
+
+typedef struct parse_value {
+		enum value_type tag;
+		int pad0;
+		union {
+				uint64_t numeric;
+				char* text;
+		} value;
+
+		parse_value(uint64_t numeric);
+		parse_value(char *text);
+		~parse_value();
+} pv_t;
+
+union vxlan_sockaddr {
+	struct in_addr	in4;
+	struct in6_addr	in6;
+};
+
+typedef struct vxlan_ftable_entry {
+		union vxlan_sockaddr vfe_raddr;
+		uint64_t vfe_v6:1;
+		uint64_t vfe_gen:15;
+		uint64_t vfe_expire:48;
+		vxlan_ftable_entry(char *, uint64_t);
+} vfe_t;
+
+typedef pair<string, pv_t> cmdent;
+typedef pair<uint64_t, vfe_t> fwdent;
+
+typedef map<string,  pv_t> cmdmap_t;
+typedef map<uint64_t, vfe_t> ftable_t;
+
+typedef struct vxlan_state {
+		/* forwarding table */
+		ftable_t vs_ftable;
+
+		/* vx nd table */
+
+		/* phys nd table */
+
+		/* default route */
+
+} vxstate_t;
+
+
+
+int parse_input(char *input, vxstate_t &state, string &result);
+
+#endif
