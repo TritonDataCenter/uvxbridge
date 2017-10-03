@@ -9,6 +9,22 @@
 #include <arpa/inet.h>
 #include "uvxbridge.h"
 
+typedef struct parse_value {
+		enum value_type tag;
+		int pad0;
+		union {
+				uint64_t numeric;
+				char* text;
+		} value;
+
+		parse_value(uint64_t numeric);
+		parse_value(char *text);
+		~parse_value();
+} pv_t;
+
+typedef pair<string, pv_t> cmdent;
+typedef map<string,  pv_t> cmdmap_t;
+
 static int
 cmdmap_get_num(cmdmap_t &map, const char *key, uint64_t &val)
 {
@@ -44,6 +60,7 @@ default_result(uint64_t seqno)
 		snprintf(buf, 32, "(result:0x%lX)", seqno);
 		return string(buf);
 }
+
 parse_value::parse_value(uint64_t numeric)
 {
 		this->tag = TAG_NUMERIC;

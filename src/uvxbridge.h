@@ -127,20 +127,6 @@ enum verb_error {
 };
 
 
-
-typedef struct parse_value {
-		enum value_type tag;
-		int pad0;
-		union {
-				uint64_t numeric;
-				char* text;
-		} value;
-
-		parse_value(uint64_t numeric);
-		parse_value(char *text);
-		~parse_value();
-} pv_t;
-
 union vxlan_sockaddr {
 	struct in_addr	in4;
 	struct in6_addr	in6;
@@ -153,10 +139,7 @@ typedef struct vxlan_ftable_entry {
 		uint64_t vfe_expire:48;
 } vfe_t;
 
-typedef pair<string, pv_t> cmdent;
 typedef pair<uint64_t, vfe_t> fwdent;
-
-typedef map<string,  pv_t> cmdmap_t;
 typedef map<uint64_t, vfe_t> ftable_t;
 
 typedef struct vxlan_state {
