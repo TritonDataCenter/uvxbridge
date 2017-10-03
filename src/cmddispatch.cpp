@@ -70,6 +70,26 @@ parse_value::~parse_value()
 typedef int (*cmdhandler_t)(cmdmap_t &map, uint64_t seqno, vxstate_t&, string&);
 
 static int
+fte_fill(vfe_t *fe, char *ip, uint64_t expire)
+{
+		int is_v6 = (index(ip, ':') != NULL);
+		fe->vfe_gen++;
+		fe->vfe_expire = expire;
+		if (is_v6) {
+				fe->vfe_v6 = 1;
+				if (inet_pton(AF_INET6, ip, &fe->vfe_raddr.in6)) {
+						return EINVAL;
+				}
+		} else {
+				fe->vfe_v6 = 0;
+				if (inet_aton(ip, &fe->vfe_raddr.in4)) {
+						return EINVAL;
+				}
+		}
+		return 0;
+}
+
+static int
 fte_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
 		uint64_t mac, expire;
@@ -84,26 +104,13 @@ fte_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &resu
 				return EINVAL;
 		auto it = state.vs_ftable.find(mac);
 		if (it == state.vs_ftable.end()) {
-				auto fe = vxlan_ftable_entry(ip, expire);
+				vfe_t fe;
+				if (fte_fill(&fe, ip, expire))
+						return EINVAL;
 				state.vs_ftable.insert(fwdent(mac, fe));
 		} else {
 				auto fe = &it->second;
-				int is_v6 = (index(ip, ':') != NULL);
-				fe->vfe_gen++;
-				fe->vfe_expire = expire;
-				if (is_v6) {
-						fe->vfe_v6 = 1;
-						if (inet_pton(AF_INET6, ip, &fe->vfe_raddr.in6)) {
-								state.vs_ftable.erase(mac);
-								return EINVAL;
-						}
-				} else {
-						fe->vfe_v6 = 0;
-						if (inet_aton(ip, &fe->vfe_raddr.in4)) {
-								state.vs_ftable.erase(mac);
-								return EINVAL;
-						}
-				}
+				return fte_fill(fe, ip, expire);
 		}
 		return 0;
 }
