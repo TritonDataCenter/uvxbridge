@@ -217,6 +217,7 @@ typedef union vni_entry {
 } vnient_t;
 
 typedef map<uint64_t, uint64_t> mac_vni_map_t;
+typedef pair<uint64_t, uint64_t> u64pair;
 typedef struct vm_vni_table {
 	mac_vni_map_t mac2vni;
 } vnitbl_t;
