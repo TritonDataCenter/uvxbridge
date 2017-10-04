@@ -79,6 +79,8 @@ gen_result(uint64_t seqno, enum verb_error err, string input)
 {
 		int len = input.size() + 64;
 		char *buf;
+		if (err != ERR_SUCCESS)
+				return dflt_result(seqno, err);
 		if ((buf = static_cast<char *>(malloc(len))) == NULL)
 				return dflt_result(seqno, ERR_NOMEM);
 		snprintf(buf, len, "(result:0x%lX error:%s %s)", seqno, err_list[err], input.c_str());
@@ -219,7 +221,7 @@ incomplete:
 }
 
 static int
-fte_remove_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+fte_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
 		uint64_t mac;
 
@@ -249,7 +251,7 @@ vfe_to_str(vfe_t &fe)
 }
 
 static int
-fte_get_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+fte_get_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
 		uint64_t mac;
 		result_map rmap;
@@ -268,108 +270,175 @@ fte_get_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string
 }
 
 static int
-fte_get_all_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+fte_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
 		auto &table = state.vs_ftable;
 		string tmp;
-		for (auto it = table.begin(); it != table.end(); it++)
+		for (auto it = table.begin(); it != table.end(); it++) {
 				tmp.append(vfe_to_str(it->second));
-		tmp.append(" ");
+				tmp.append(" ");
+		}
 		result = gen_result(seqno, ERR_SUCCESS, tmp);
 		return 0;
 }
 
 static int
-nd_phys_get_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+nd_get_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
-		
+		enum verb_error err;
+		string tmp;
+
+		err = ERR_SUCCESS;
+		result = gen_result(seqno, err, tmp);
 		return 0;
 }
 
 static int
-nd_phys_set_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+nd_set_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
-		
+		enum verb_error err;
+		string tmp;
+
+		err = ERR_SUCCESS;
+		result = gen_result(seqno, err, tmp);
 		return 0;
 }
 
 static int
-nd_phys_del_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+nd_del_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
-		
+		enum verb_error err;
+		string tmp;
+
+		err = ERR_SUCCESS;
+		result = gen_result(seqno, err, tmp);
 		return 0;
 }
 
 static int
-nd_phys_get_all_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+nd_get_all_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
-		
+		enum verb_error err;
+		string tmp;
+
+		err = ERR_SUCCESS;
+		result = gen_result(seqno, err, tmp);
 		return 0;
 }
 
 static int
-nd_vx_get_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+nd_phys_get_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
-		
+		return nd_get_handler(map, seqno, state.vs_l2_phys, result);
+}
+
+static int
+nd_phys_set_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+		return nd_set_handler(map, seqno, state.vs_l2_phys, result);
+}
+
+static int
+nd_phys_del_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+		return nd_del_handler(map, seqno, state.vs_l2_phys, result);
+}
+
+static int
+nd_phys_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+		return nd_get_all_handler(map, seqno, state.vs_l2_phys, result);
+}
+
+static int
+nd_vx_get_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+		return nd_get_handler(map, seqno, state.vs_l2_vx, result);
+}
+
+static int
+nd_vx_set_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+		return nd_set_handler(map, seqno, state.vs_l2_vx, result);
+}
+
+static int
+nd_vx_del_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+		return nd_del_handler(map, seqno, state.vs_l2_vx, result);
+}
+
+static int
+nd_vx_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+		return nd_get_all_handler(map, seqno, state.vs_l2_vx, result);
+}
+
+static int
+vm_vni_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+		enum verb_error err = ERR_INCOMPLETE;
+		uint64_t mac, vlanid, vxlanid;
+
+		if (cmdmap_get_num(map, "mac", mac))
+				goto incomplete;
+		if (cmdmap_get_num(map, "vlanid", vlanid))
+				goto incomplete;
+		if (cmdmap_get_num(map, "vxlanid", vxlanid))
+				goto incomplete;
+		/* XXX */
+		return 0;
+incomplete:
+		result = dflt_result(seqno, err);
+		return EINVAL;
+}
+
+static int
+vm_vni_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+		enum verb_error err = ERR_INCOMPLETE;
+		uint64_t mac;
+
+		if (cmdmap_get_num(map, "mac", mac))
+				goto incomplete;
+
+		/* XXX */
+		return 0;
+incomplete:
+		result = dflt_result(seqno, err);
+		return EINVAL;
+}
+
+static int
+vm_vni_get_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+		enum verb_error err = ERR_INCOMPLETE;
+		uint64_t mac;
+
+		if (cmdmap_get_num(map, "mac", mac))
+				goto incomplete;
+
+		/* XXX */
+		return 0;
+incomplete:
+		result = dflt_result(seqno, err);
+		return EINVAL;
+}
+
+static int
+vm_vni_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
 		return 0;
 }
 
 static int
-nd_vx_set_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
-{
-		
-		return 0;
-}
-
-static int
-nd_vx_del_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
-{
-		
-		return 0;
-}
-
-static int
-nd_vx_get_all_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
-{
-		
-		return 0;
-}
-
-
-static int
-vm_vni_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
-{
-		
-		return 0;
-}
-
-static int
-vm_vni_remove_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
-{
-		
-		return 0;
-}
-
-static int
-vm_vni_get_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
 		return 0;
 }
 
 static int
-vm_vni_get_all_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
-{
-		return 0;
-}
-
-static int
-route_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
-{
-		return 0;
-}
-
-static int
-route_remove_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+route_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
 		return 0;
 }

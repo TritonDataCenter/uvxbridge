@@ -55,7 +55,7 @@
  *       (result:<seqno> error:<errstr> (mac: big-endian 6 bytes
  *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
  *
- *   map 5-byte local VM mac to vlanid|vxlanid
+ *   map local VM mac to 5 byte vlanid|vxlanid
  * - UPDATE_VM_VNI:<seqno> vlanid: 2-bytes vxlanid: 3-bytes mac: 6-bytes
  *     (result:<seqno> error:<errstr> (gen: 4 byte))
  *
@@ -116,11 +116,25 @@ enum verb_error {
 		ERR_NOENTRY
 };
 
-
 union vxlan_sockaddr {
 	struct in_addr	in4;
 	struct in6_addr	in6;
 };
+
+using std::string;
+using std::pair;
+using std::map;
+
+typedef map<uint32_t, uint64_t> arp_t;
+typedef map<uint64_t, uint32_t> revarp_t;
+typedef map<struct in6_addr, uint64_t> nd6_t;
+typedef map<uint64_t,  struct in6_addr> revnd6_t;
+typedef struct l2_table {
+		arp_t l2t_v4;
+		revarp_t l2t_rev_v4;
+		nd6_t l2t_v6;
+		revnd6_t l2t_rev_v6;
+} l2tbl_t;
 
 typedef struct vxlan_ftable_entry {
 		union vxlan_sockaddr vfe_raddr;
@@ -128,10 +142,6 @@ typedef struct vxlan_ftable_entry {
 		uint64_t vfe_gen:15;
 		uint64_t vfe_expire:48;
 } vfe_t;
-
-using std::string;
-using std::pair;
-using std::map;
 
 typedef pair<uint64_t, vfe_t> fwdent;
 typedef map<uint64_t, vfe_t> ftable_t;
@@ -141,8 +151,10 @@ typedef struct vxlan_state {
 		ftable_t vs_ftable;
 
 		/* vx nd table */
+		l2tbl_t vs_l2_vx;
 
 		/* phys nd table */
+		l2tbl_t vs_l2_phys;
 
 		/* default route */
 
