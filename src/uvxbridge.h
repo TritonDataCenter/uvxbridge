@@ -196,17 +196,17 @@ struct in6cmp {
 	bool
 	operator() (const in6_addr& lhs, const in6_addr& rhs) const
 	{
-			uint32_t tmp;
+		uint32_t tmp;
 
-			if ((tmp = (rhs.s6_addr32[0] - lhs.s6_addr32[0])) != 0)
-				return tmp > 0;
-			if ((tmp = (rhs.s6_addr32[1] - lhs.s6_addr32[1])) != 0)
-				return tmp > 0;
-			if ((tmp = (rhs.s6_addr32[2] - lhs.s6_addr32[2])) != 0)
-				return tmp > 0;
-			if ((tmp = (rhs.s6_addr32[3] - lhs.s6_addr32[3])) != 0)
-				return tmp > 0;
-			return true;
+		if ((tmp = (rhs.s6_addr32[0] - lhs.s6_addr32[0])) != 0)
+			return tmp > 0;
+		if ((tmp = (rhs.s6_addr32[1] - lhs.s6_addr32[1])) != 0)
+			return tmp > 0;
+		if ((tmp = (rhs.s6_addr32[2] - lhs.s6_addr32[2])) != 0)
+			return tmp > 0;
+		if ((tmp = (rhs.s6_addr32[3] - lhs.s6_addr32[3])) != 0)
+			return tmp > 0;
+		return true;
 	}
 };
 
