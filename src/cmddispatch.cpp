@@ -318,8 +318,6 @@ fte_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &res
 static int
 nd_get_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
-	enum verb_error err;
-	string tmp;
 	result_map rmap;
 	uint64_t mac;
 	char buf[16];
@@ -356,8 +354,7 @@ nd_get_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 	}
 	snprintf(buf, 16, "0x%lX", be64toh(mac));
 	rmap.insert("mac", buf);
-	err = ERR_SUCCESS;
-	result = gen_result(seqno, err, rmap.to_str());
+	result = gen_result(seqno, ERR_SUCCESS, rmap.to_str());
 	return 0;
   noentry:
 	result = dflt_result(seqno, ERR_NOENTRY);
@@ -367,44 +364,90 @@ nd_get_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 static int
 nd_set_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
-	enum verb_error err;
-	string tmp;
 	uint64_t mac;
+	union vxlan_in_addr raddr;
+	int rc;
+	char *ip;
+	bool v6;
 
-	if (cmdmap_get_num(map, "mac", mac)) {
-		result = dflt_result(seqno, ERR_INCOMPLETE);
+	if (cmdmap_get_str(map, "raddr", &ip))
+		goto incomplete;
+	if (cmdmap_get_num(map, "mac", mac))
+		goto incomplete;
+	v6 = (index(ip, ':') != NULL);
+	if (v6)
+		rc = inet_pton(AF_INET6, ip, &raddr.in6);
+	else
+		rc = inet_pton(AF_INET, ip, &raddr.in4);
+	if (rc) {
+		result = dflt_result(seqno, ERR_PARSE);
 		return EINVAL;
 	}
-	err = ERR_SUCCESS;
-	result = gen_result(seqno, err, tmp);
+	mac = htobe64(mac);
+	if (v6) {
+		for (auto i = 0; i < 4; i++)
+			raddr.in6.s6_addr32[i] = be32toh(raddr.in6.s6_addr32[i]);
+		auto it = tbl.l2t_v6.find(raddr.in6);
+		if (it != tbl.l2t_v6.end())
+			it->second = mac;
+		else
+			tbl.l2t_v6.insert(pair<struct in6_addr, uint64_t>(raddr.in6, mac));
+	} else {
+		uint32_t addr4 = be32toh(raddr.in4.s_addr);
+
+		auto it = tbl.l2t_v4.find(addr4);
+		if (it != tbl.l2t_v4.end())
+			it->second = mac;
+		else
+			tbl.l2t_v4.insert(pair<uint32_t, uint64_t>(addr4, mac));
+	}
+	result = dflt_result(seqno, ERR_SUCCESS);
 	return 0;
+  incomplete:
+	result = dflt_result(seqno, ERR_INCOMPLETE);
+	return EINVAL;
 }
 
 static int
 nd_del_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
-	enum verb_error err;
-	string tmp;
-	uint64_t mac;
+	union vxlan_in_addr raddr;
+	int rc;
+	char *ip;
+	bool v6;
 
-	if (cmdmap_get_num(map, "mac", mac)) {
-		result = dflt_result(seqno, ERR_INCOMPLETE);
+	if (cmdmap_get_str(map, "raddr", &ip))
+		goto incomplete;
+	v6 = (index(ip, ':') != NULL);
+	if (v6)
+		rc = inet_pton(AF_INET6, ip, &raddr.in6);
+	else
+		rc = inet_pton(AF_INET, ip, &raddr.in4);
+	if (rc) {
+		result = dflt_result(seqno, ERR_PARSE);
 		return EINVAL;
 	}
-	err = ERR_SUCCESS;
-	result = gen_result(seqno, err, tmp);
+	if (v6) {
+		for (auto i = 0; i < 4; i++)
+			raddr.in6.s6_addr32[i] = be32toh(raddr.in6.s6_addr32[i]);
+		tbl.l2t_v6.erase(raddr.in6);
+	} else {
+		uint32_t addr4 = be32toh(raddr.in4.s_addr);
+
+		tbl.l2t_v4.erase(addr4);
+	}
+	result = dflt_result(seqno, ERR_SUCCESS);
 	return 0;
+  incomplete:
+	result = dflt_result(seqno, ERR_INCOMPLETE);
+	return EINVAL;
 }
 
 static int
 nd_get_all_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
-	enum verb_error err;
-	string tmp;
-
-	err = ERR_SUCCESS;
-	result = gen_result(seqno, err, tmp);
-	return 0;
+	result = UNIMPLEMENTED(seqno);
+	return ENOTSUP;
 }
 
 static int
