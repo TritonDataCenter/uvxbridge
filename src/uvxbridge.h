@@ -26,6 +26,7 @@
  *                expire: 8 bytes - useconds
  *                   gen: 4 byte)*)  
  *
+ *
  *   manage physical L2 table entries for remote IP
  * - SET_PHYS_ND:<seqno> mac: big-endian 6 bytes raddr: <4-tuple| v6addr w/ no symbolic>
  *   (result:<seqno> error:<errstr>)
@@ -39,6 +40,7 @@
  * - GET_ALL_PHYS_ND:<seqno>
  *       (result:<seqno> error:<errstr> (mac: big-endian 6 bytes
  *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
+ *
  *
  *   manage vxlan L2 table entries for remote IP
  * - SET_VX_ND:<seqno> mac: big-endian 6 bytes raddr: <4-tuple| v6addr w/ no symbolic>
@@ -54,6 +56,7 @@
  * - GET_ALL_VX_ND:<seqno>
  *       (result:<seqno> error:<errstr> (mac: big-endian 6 bytes
  *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
+ *
  *
  *   map local VM mac to 5 byte vlanid|vxlanid
  * - UPDATE_VM_VNI:<seqno> vlanid: 2-bytes vxlanid: 3-bytes mac: 6-bytes
@@ -73,21 +76,31 @@
  *              vxlanid: 3-bytes
  *                  gen: 4 byte)*)
  *
+ *
  * - UPDATE_DEFAULT_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
  *       (result:<seqno> error:<errstr> (gen: 4 bytes)?)
  *
  * - REMOVE_DEFAULT_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
  *       (result:<seqno> error:<errstr>)
  *
+ *
+ *  Stop forwarding packets
+ * - SUSPEND:<seqno>
+ *       (result:<seqno> error:<errstr>)
+ *
+ *  Resume forwarding packets
+ * - RESUME:<seqno>
+ *       (result:<seqno> error:<errstr>)
+ *
+ *
+ *  Signal that all seqno prior have completed
+ * - BARRIER:<seqno>
+ *       (result:<seqno> error:<errstr>)
  */
 
 enum verb {
 	VERB_BAD = 0x0,
-
-	VERB_UPDATE_FTE = 0x2,
-	VERB_REMOVE_FTE = 0x3,
-	VERB_GET_FTE = 0x4,
-	VERB_GET_ALL_FTE = 0x5,
+	VERB_BARRIER = 0x1,
 
 	VERB_SET_PHYS_ND = 0x10,
 	VERB_GET_PHYS_ND = 0x11,
@@ -105,7 +118,15 @@ enum verb {
 	VERB_SET_VX_ND = 0x40,
 	VERB_GET_VX_ND = 0x41,
 	VERB_DEL_VX_ND = 0x42,
-	VERB_GET_ALL_VX_ND = 0x43
+	VERB_GET_ALL_VX_ND = 0x43,
+
+	VERB_SUSPEND = 0x50,
+	VERB_RESUME = 0x51,
+
+	VERB_UPDATE_FTE = 0x60,
+	VERB_REMOVE_FTE = 0x61,
+	VERB_GET_FTE = 0x62,
+	VERB_GET_ALL_FTE = 0x63
 };
 
 enum verb_error {

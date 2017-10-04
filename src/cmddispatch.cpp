@@ -445,6 +445,24 @@ route_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &re
 	return 0;
 }
 
+static int
+suspend_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+{
+	return 0;
+}
+
+static int
+resume_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+{
+	return 0;
+}
+
+static int
+barrier_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+{
+	return 0;
+}
+
 typedef struct _ent {
 	const char *ent;
 	cmdhandler_t handler;
@@ -478,6 +496,11 @@ static ent_t ent_list[] = {
 
 	KEYENT(VERB_UPDATE_DEFAULT_ROUTE, route_update_handler),
 	KEYENT(VERB_REMOVE_DEFAULT_ROUTE, route_remove_handler),
+
+	KEYENT(VERB_SUSPEND, suspend_handler),
+	KEYENT(VERB_RESUME, resume_handler),
+
+	KEYENT(VERB_BARRIER, barrier_handler),
 
 	KEYENT(VERB_BAD, NULL) /* must be last */
 };
