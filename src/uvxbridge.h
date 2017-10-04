@@ -93,9 +93,19 @@
  *       (result:<seqno> error:<errstr>)
  *
  *
- *  Signal that all seqno prior have completed
+ *  Signal that all seqno prior have completed, error value is the
+ *  first error encountered since the last BARRIER issued, if any.
  * - BARRIER:<seqno>
  *       (result:<seqno> error:<errstr>)
+ *
+ *   Syntactic sugar for BARRIER+SUSPEND
+ * - BEGIN_UPDATE:<seqno>
+ *       (result:<seqno> error:<errstr>)
+ *
+ *   Syntactic sugar for BARRIER+RESUME
+ * - COMMIT_UPDATE:<seqno>
+ *       (result:<seqno> error:<errstr>)
+ *
  */
 
 enum verb {
@@ -122,6 +132,8 @@ enum verb {
 
 	VERB_SUSPEND = 0x50,
 	VERB_RESUME = 0x51,
+	VERB_BEGIN_UPDATE = 0x52,
+	VERB_COMMIT_UPDATE = 0x53,
 
 	VERB_UPDATE_FTE = 0x60,
 	VERB_REMOVE_FTE = 0x61,
@@ -135,11 +147,6 @@ enum verb_error {
 		ERR_INCOMPLETE,
 		ERR_NOMEM,
 		ERR_NOENTRY
-};
-
-union vxlan_sockaddr {
-	struct in_addr	in4;
-	struct in6_addr	in6;
 };
 
 using std::string;
@@ -157,6 +164,26 @@ typedef struct l2_table {
 		revnd6_t l2t_rev_v6;
 } l2tbl_t;
 
+typedef union vni_entry {
+	uint64_t data;
+	struct {
+		uint64_t pad:24;
+		uint64_t vlanid:16;
+		uint64_t vxlanid:24;
+	} fields;
+} vnient_t;
+
+typedef map<uint64_t, uint64_t> mac_vni_map_t;
+typedef struct vm_vni_table {
+	mac_vni_map_t mac2vni;
+	mac_vni_map_t vni2mac;
+} vnitbl_t;
+
+
+union vxlan_sockaddr {
+	struct in_addr	in4;
+	struct in6_addr	in6;
+};
 typedef struct vxlan_ftable_entry {
 		union vxlan_sockaddr vfe_raddr;
 		uint64_t vfe_v6:1;

@@ -463,6 +463,20 @@ barrier_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string
 	return 0;
 }
 
+static int
+begin_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+{
+	return 0;
+}
+
+static int
+commit_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
+{
+	return 0;
+}
+
+
+
 typedef struct _ent {
 	const char *ent;
 	cmdhandler_t handler;
@@ -499,6 +513,8 @@ static ent_t ent_list[] = {
 
 	KEYENT(VERB_SUSPEND, suspend_handler),
 	KEYENT(VERB_RESUME, resume_handler),
+	KEYENT(VERB_BEGIN_UPDATE, begin_update_handler),
+	KEYENT(VERB_COMMIT_UPDATE, commit_update_handler),
 
 	KEYENT(VERB_BARRIER, barrier_handler),
 
