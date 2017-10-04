@@ -35,7 +35,7 @@
  * 
  *   Add per-VNI forwarding table entry map destination host mac to remote ip
  * - UPDATE_FTE:<seqno> mac: 6 bytes
- *                vni: 3 byte value
+ *                vxlanid: 3 byte value
  *                vlanid: 2 byte value
  *                raddr: <4-tuple| v6addr w/ no symbolic>
  *             expire: 8 bytes - useconds
@@ -43,19 +43,20 @@
  *
  *  Get forwarding entry details
  * - GET_FTE:<seqno> mac: 6 bytes
- *                   vni: 3 byte value
+ *               vxlanid: 3 byte value
+*                 vlanid: 2 byte value
  *       (result:<seqno> error:<errstr> (raddr: <4-tuple| v6addr w/ no symbolic>
  *              expire: 8 bytes - useconds
  *                 gen: 4 byte)?)
  * 
  * - REMOVE_FTE:<seqno> mac: 6 bytes
- *                      vni: 3 byte value
+ *                  vxlanid: 3 byte value
  *       (result:<seqno> error:<errstr>)
  *
  * - GET_ALL_FTE:<seqno>
  *         (result: error:<errstr>
  *                  (mac: 6 bytes
- *                   vni: 3 byte value
+ *               vxlanid: 3 byte value
  *                vlanid: 2 byte value
  *                 raddr: <4-tuple| v6addr w/ no symbolic>
  *                expire: 8 bytes - useconds
