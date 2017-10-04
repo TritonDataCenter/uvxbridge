@@ -134,6 +134,14 @@
  * - COMMIT_UPDATE:<seqno>
  *       (result:<seqno> error:<errstr>)
  *
+ *
+ * Sample syntax:
+ * client -> server: "VERB_UPDATE_DEFAULT_ROUTE:0x1 raddr:\"192.168.0.1\"\n"
+ * server -> client: "(result:0x1 error:\"ERR_SUCCESS\" (gen:0x0))\n"
+ * client -> server: "VERB_SET_PHYS_ND:0x2 raddr:\"192.168.0.1\" mac:0xbabecafebeef\n"
+ * server -> client: "(result:0x2 error:\"ERR_SUCCESS\")"
+ * client -> server: "VERB_GET_PHYS_ND_ALL:0x3\n"
+ * server -> client: "(result:0x3 error:\"ERR_SUCCESS\" (raddr:\"192.168.0.1\" mac:0xbabecafebeef))\n"
  */
 
 enum verb {
