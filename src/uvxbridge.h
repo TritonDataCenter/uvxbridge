@@ -135,7 +135,8 @@
  *       (result:<seqno> error:<errstr>)
  *
  *
- * Sample syntax:
+ * Sample syntax - with the command shown in C syntax to indicate literal quotes
+ *                 and newlines:
  * client -> server: "VERB_UPDATE_DEFAULT_ROUTE:0x1 raddr:\"192.168.0.1\"\n"
  * server -> client: "(result:0x1 error:\"ERR_SUCCESS\" (gen:0x0))\n"
  * client -> server: "VERB_SET_PHYS_ND:0x2 raddr:\"192.168.0.1\" mac:0xbabecafebeef\n"
