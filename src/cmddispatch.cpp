@@ -536,17 +536,28 @@ vm_vni_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &r
 static int
 vm_vni_get_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
-	enum verb_error err = ERR_INCOMPLETE;
-	uint64_t mac;
+	struct result_map rmap;
+	uint64_t mac, vlanid, vxlanid, gen;
+	vnient_t ent;
 
-	if (cmdmap_get_num(map, "mac", mac))
-		goto incomplete;
-
-	/* XXX */
+	if (cmdmap_get_num(map, "mac", mac )) {
+		result = dflt_result(seqno, ERR_INCOMPLETE);
+		return EINVAL;
+	}
+	auto it = state.vs_vni_table.mac2vni.find(mac);
+	if (it == state.vs_vni_table.mac2vni.end()) {
+		result = dflt_result(seqno, ERR_NOENTRY);
+		return ENOENT;
+	}
+	ent.data = 	it->second;
+	vxlanid = ent.fields.vxlanid;
+	vlanid = ent.fields.vlanid;
+	gen = ent.fields.gen;
+	rmap.insert("vxlanid", vxlanid);
+	rmap.insert("vlanid", vlanid);
+	rmap.insert("gen", gen);
+	result = gen_result(seqno, ERR_SUCCESS, rmap.to_str());
 	return 0;
- incomplete:
-	result = dflt_result(seqno, err);
-	return EINVAL;
 }
 
 static int

@@ -222,8 +222,8 @@ typedef struct l2_table {
 typedef union vni_entry {
 	uint64_t data;
 	struct {
-		uint64_t pad:24;
-		uint64_t vlanid:16;
+		uint64_t gen:28;
+		uint64_t vlanid:12;
 		uint64_t vxlanid:24;
 	} fields;
 } vnient_t;
