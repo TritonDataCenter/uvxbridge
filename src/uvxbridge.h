@@ -187,9 +187,7 @@ typedef map<struct in6_addr, uint64_t> nd6_t;
 typedef map<uint64_t,  struct in6_addr> revnd6_t;
 typedef struct l2_table {
 	arp_t l2t_v4;
-	revarp_t l2t_rev_v4;
 	nd6_t l2t_v6;
-	revnd6_t l2t_rev_v6;
 } l2tbl_t;
 
 typedef union vni_entry {
@@ -204,7 +202,6 @@ typedef union vni_entry {
 typedef map<uint64_t, uint64_t> mac_vni_map_t;
 typedef struct vm_vni_table {
 	mac_vni_map_t mac2vni;
-	mac_vni_map_t vni2mac;
 } vnitbl_t;
 
 
@@ -231,6 +228,9 @@ typedef struct vxlan_state {
 
 	/* phys nd table */
 	l2tbl_t vs_l2_phys;
+
+	/* vm vni table */
+	vnitbl_t vs_vni_table;
 
 	/* default route */
 

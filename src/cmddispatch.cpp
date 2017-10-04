@@ -428,15 +428,15 @@ vm_vni_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &r
 {
 	enum verb_error err = ERR_INCOMPLETE;
 	uint64_t mac;
+	mac_vni_map_t &fwd = state.vs_vni_table.mac2vni;
 
-	if (cmdmap_get_num(map, "mac", mac))
-		goto incomplete;
-
-	/* XXX */
+	if (cmdmap_get_num(map, "mac", mac)) {
+		result = dflt_result(seqno, err);
+		return EINVAL;
+	}
+	result = dflt_result(seqno, ERR_SUCCESS);
+	fwd.erase(mac);
 	return 0;
- incomplete:
-	result = dflt_result(seqno, err);
-	return EINVAL;
 }
 
 static int
