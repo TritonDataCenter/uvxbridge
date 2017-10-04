@@ -630,8 +630,8 @@ static ent_t ent_list[] = {
 	KEYENT(VERB_DEL_VX_ND, nd_vx_del_handler),
 	KEYENT(VERB_GET_ALL_VX_ND, nd_vx_get_all_handler),
 
-	KEYENT(VERB_UPDATE_DEFAULT_ROUTE, route_update_handler),
-	KEYENT(VERB_REMOVE_DEFAULT_ROUTE, route_remove_handler),
+	KEYENT(VERB_UPDATE_ROUTE, route_update_handler),
+	KEYENT(VERB_REMOVE_ROUTE, route_remove_handler),
 
 	KEYENT(VERB_SUSPEND, suspend_handler),
 	KEYENT(VERB_RESUME, resume_handler),

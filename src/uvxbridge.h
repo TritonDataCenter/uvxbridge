@@ -94,10 +94,13 @@
  *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
  *
  *
- * - UPDATE_DEFAULT_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
+ * - UPDATE_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
+ *                       subnet: <4-tuple| v6addr w/ no symbolic>
+ *                      netmask: hex string
+ *                      [default:<true|false>]?
  *       (result:<seqno> error:<errstr> (gen: 4 bytes)?)
  *
- * - REMOVE_DEFAULT_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
+ * - REMOVE_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
  *       (result:<seqno> error:<errstr>)
  *
  *
@@ -126,7 +129,7 @@
  *
  * Sample syntax - with the command shown in C syntax to indicate literal quotes
  *                 and newlines:
- * client -> server: "VERB_UPDATE_DEFAULT_ROUTE:0x1 raddr:\"192.168.0.1\"\n"
+ * client -> server: "VERB_UPDATE_ROUTE:0x1 raddr:\"192.168.0.1\" default:\"true\" subnet:\"192.168.0.0\" netmask:\"ffff0000\"\n"
  * server -> client: "(result:0x1 error:\"ERR_SUCCESS\" (gen:0x0))\n"
  * client -> server: "VERB_SET_PHYS_ND:0x2 raddr:\"192.168.0.1\" mac:0xbabecafebeef\n"
  * server -> client: "(result:0x2 error:\"ERR_SUCCESS\")"
@@ -149,8 +152,8 @@ enum verb {
 	VERB_GET_ALL_PHYS_ND = 0x23,
 	
 
-	VERB_UPDATE_DEFAULT_ROUTE = 0x30,
-	VERB_REMOVE_DEFAULT_ROUTE = 0x31,
+	VERB_UPDATE_ROUTE = 0x30,
+	VERB_REMOVE_ROUTE = 0x31,
 
 	VERB_SET_VX_ND = 0x40,
 	VERB_GET_VX_ND = 0x41,
