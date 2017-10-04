@@ -1,3 +1,31 @@
+/*
+ * Copyright (C) 2017 Joyent Inc.
+ * All rights reserved.
+ *
+ * Written by: Matthew Macy <matt.macy@joyent.com>
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *   1. Redistributions of source code must retain the above copyright
+ *      notice, this list of conditions and the following disclaimer.
+ *   2. Redistributions in binary form must reproduce the above copyright
+ *      notice, this list of conditions and the following disclaimer in the
+ *      documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
 #include <sys/types.h>
 #include <sys/endian.h>
 #include <stdio.h>
@@ -548,7 +576,6 @@ gather_args(cmdmap_t &map, char *input)
 			indexp += 2;
 			v = static_cast<uint64_t>(strtoll(indexp, NULL, 16));
 			map.insert(cmdent(string(k), parse_value(v)));
-						
 		}
 		/* UNKNOWN */
 		else
@@ -573,7 +600,7 @@ parse_input(char *input, struct vxlan_state &state, string &result)
 		return EINVAL;
 	indexp += 2;
 	seqno = static_cast<uint64_t>(strtoll(indexp, NULL, 16));
-		
+
 	for (verbent = ent_list; verbent->action != VERB_BAD; verbent++) {
 		if (!strcmp(verbent->ent, verbstr))
 			break;
