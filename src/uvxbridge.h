@@ -33,23 +33,30 @@
 /*  
  * VERB command set
  * 
- *   Add forwarding table entry map destination host mac to remote ip
- * - UPDATE_FTE:<seqno> mac: big-endian 6 bytes
+ *   Add per-VNI forwarding table entry map destination host mac to remote ip
+ * - UPDATE_FTE:<seqno> mac: 6 bytes
+ *                vni: 3 byte value
+ *                vlanid: 2 byte value
  *                raddr: <4-tuple| v6addr w/ no symbolic>
  *             expire: 8 bytes - useconds
  *         (result:seqno error:<errstr> (gen: 4 byte)?)
  *
  *  Get forwarding entry details
- * - GET_FTE:<seqno> big-endian 6 bytes
+ * - GET_FTE:<seqno> mac: 6 bytes
+ *                   vni: 3 byte value
  *       (result:<seqno> error:<errstr> (raddr: <4-tuple| v6addr w/ no symbolic>
  *              expire: 8 bytes - useconds
  *                 gen: 4 byte)?)
  * 
- * - REMOVE_FTE:<seqno> vxmac: big-endian 6 bytes
+ * - REMOVE_FTE:<seqno> mac: 6 bytes
+ *                      vni: 3 byte value
  *       (result:<seqno> error:<errstr>)
  *
  * - GET_ALL_FTE:<seqno>
- *         (result: error:<errstr> (mac: big-endian 6 bytes
+ *         (result: error:<errstr>
+ *                  (mac: 6 bytes
+ *                   vni: 3 byte value
+ *                vlanid: 2 byte value
  *                 raddr: <4-tuple| v6addr w/ no symbolic>
  *                expire: 8 bytes - useconds
  *                   gen: 4 byte)*)  
@@ -84,25 +91,6 @@
  * - GET_ALL_VX_ND:<seqno>
  *       (result:<seqno> error:<errstr> (mac: big-endian 6 bytes
  *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
- *
- *
- *   map local VM mac to 5 byte vlanid|vxlanid
- * - UPDATE_VM_VNI:<seqno> vlanid: 2-bytes vxlanid: 3-bytes mac: 6-bytes
- *     (result:<seqno> error:<errstr> (gen: 4 byte))
- *
- * - GET_VM_VNI:<seqno> mac: 6-bytes
- *       (result:<seqno> error:<errstr> (vlanid: 2-bytes
- *              vxlanid: 3-bytes
- *                  gen: 4 byte))
- *
- * - REMOVE_VM_VNI:<seqno> mac: big-endian 6 bytes
- *       (result:<seqno> error:<errstr>)
- *
- * - GET_ALL_VM_VNI:<seqno>
- *       (result:<seqno>  error:<errstr> (mac: 6 bytes 
- *              vlanid: 2-bytes
- *              vxlanid: 3-bytes
- *                  gen: 4 byte)*)
  *
  *
  * - UPDATE_DEFAULT_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
@@ -149,15 +137,16 @@ enum verb {
 	VERB_BAD = 0x0,
 	VERB_BARRIER = 0x1,
 
-	VERB_SET_PHYS_ND = 0x10,
-	VERB_GET_PHYS_ND = 0x11,
-	VERB_DEL_PHYS_ND = 0x12,
-	VERB_GET_ALL_PHYS_ND = 0x13,
+	VERB_UPDATE_FTE = 0x10,
+	VERB_REMOVE_FTE = 0x11,
+	VERB_GET_FTE = 0x12,
+	VERB_GET_ALL_FTE = 0x13,
+
+	VERB_SET_PHYS_ND = 0x20,
+	VERB_GET_PHYS_ND = 0x21,
+	VERB_DEL_PHYS_ND = 0x22,
+	VERB_GET_ALL_PHYS_ND = 0x23,
 	
-	VERB_UPDATE_VM_VNI = 0x20,
-	VERB_REMOVE_VM_VNI = 0x21,
-	VERB_GET_VM_VNI = 0x22,
-	VERB_GET_ALL_VM_VNI = 0x23,
 
 	VERB_UPDATE_DEFAULT_ROUTE = 0x30,
 	VERB_REMOVE_DEFAULT_ROUTE = 0x31,
@@ -170,12 +159,7 @@ enum verb {
 	VERB_SUSPEND = 0x50,
 	VERB_RESUME = 0x51,
 	VERB_BEGIN_UPDATE = 0x52,
-	VERB_COMMIT_UPDATE = 0x53,
-
-	VERB_UPDATE_FTE = 0x60,
-	VERB_REMOVE_FTE = 0x61,
-	VERB_GET_FTE = 0x62,
-	VERB_GET_ALL_FTE = 0x63
+	VERB_COMMIT_UPDATE = 0x53
 };
 
 enum verb_error {

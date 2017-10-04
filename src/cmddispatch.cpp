@@ -267,10 +267,9 @@ fte_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &resu
 	return 0;
 }
 
-static string
-vfe_to_str(vfe_t &fe)
+static void
+vfe_to_rmap(vfe_t &fe, result_map &rmap)
 {
-	result_map rmap;
 	char buf[INET6_ADDRSTRLEN];
 
 	if (fe.vfe_v6)
@@ -280,25 +279,47 @@ vfe_to_str(vfe_t &fe)
 	rmap.insert("raddr", buf);
 	rmap.insert("gen", fe.vfe_gen);
 	rmap.insert("expire", fe.vfe_expire);
+}
+
+static string
+vfe_to_str(vfe_t &fe)
+{
+	struct result_map rmap;
+
+	vfe_to_rmap(fe, rmap);
 	return rmap.to_str();
 }
 
 static int
 fte_get_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
-	uint64_t mac;
 	result_map rmap;
+	uint64_t mac, vlanid, vxlanid, gen;
+	vnient_t ent;
 
 	if (cmdmap_get_num(map, "mac", mac)) {
 		result = dflt_result(seqno, ERR_INCOMPLETE);
 		return EINVAL;
 	}
-	auto it = state.vs_ftable.find(mac);
-	if (it == state.vs_ftable.end()) {
+	auto fit = state.vs_ftable.find(mac);
+	if (fit == state.vs_ftable.end()) {
 		result = dflt_result(seqno, ERR_NOENTRY);
 		return ENOENT;
 	}
-	result = gen_result(seqno, ERR_SUCCESS, vfe_to_str(it->second));
+	auto vit = state.vs_vni_table.mac2vni.find(mac);
+	if (vit == state.vs_vni_table.mac2vni.end()) {
+		result = dflt_result(seqno, ERR_NOENTRY);
+		return ENOENT;
+	}
+	ent.data = 	vit->second;
+	vxlanid = ent.fields.vxlanid;
+	vlanid = ent.fields.vlanid;
+	gen = ent.fields.gen;
+	rmap.insert("vxlanid", vxlanid);
+	rmap.insert("vlanid", vlanid);
+	rmap.insert("gen", gen);
+	vfe_to_rmap(fit->second, rmap);
+	result = gen_result(seqno, ERR_SUCCESS, rmap.to_str());
 	return 0;
 }
 
@@ -498,6 +519,7 @@ nd_vx_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &r
 	return nd_get_all_handler(map, seqno, state.vs_l2_vx, result);
 }
 
+#if 0
 static int
 vm_vni_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
@@ -532,40 +554,7 @@ vm_vni_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &r
 	fwd.erase(mac);
 	return 0;
 }
-
-static int
-vm_vni_get_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
-{
-	struct result_map rmap;
-	uint64_t mac, vlanid, vxlanid, gen;
-	vnient_t ent;
-
-	if (cmdmap_get_num(map, "mac", mac )) {
-		result = dflt_result(seqno, ERR_INCOMPLETE);
-		return EINVAL;
-	}
-	auto it = state.vs_vni_table.mac2vni.find(mac);
-	if (it == state.vs_vni_table.mac2vni.end()) {
-		result = dflt_result(seqno, ERR_NOENTRY);
-		return ENOENT;
-	}
-	ent.data = 	it->second;
-	vxlanid = ent.fields.vxlanid;
-	vlanid = ent.fields.vlanid;
-	gen = ent.fields.gen;
-	rmap.insert("vxlanid", vxlanid);
-	rmap.insert("vlanid", vlanid);
-	rmap.insert("gen", gen);
-	result = gen_result(seqno, ERR_SUCCESS, rmap.to_str());
-	return 0;
-}
-
-static int
-vm_vni_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
-{
-	result = UNIMPLEMENTED(seqno);
-	return 0;
-}
+#endif
 
 static int
 route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
@@ -616,8 +605,6 @@ commit_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, 
 	return 0;
 }
 
-
-
 typedef struct _ent {
 	const char *ent;
 	cmdhandler_t handler;
@@ -626,7 +613,6 @@ typedef struct _ent {
 } ent_t;
 
 #define KEYENT(action, handler) {#action, handler, action, 0} 
-
 
 static ent_t ent_list[] = {
 	KEYENT(VERB_UPDATE_FTE, fte_update_handler),
@@ -638,11 +624,6 @@ static ent_t ent_list[] = {
 	KEYENT(VERB_SET_PHYS_ND, nd_phys_set_handler),
 	KEYENT(VERB_DEL_PHYS_ND, nd_phys_del_handler),
 	KEYENT(VERB_GET_ALL_PHYS_ND, nd_phys_get_all_handler),
-
-	KEYENT(VERB_UPDATE_VM_VNI, vm_vni_update_handler),
-	KEYENT(VERB_REMOVE_VM_VNI, vm_vni_remove_handler),
-	KEYENT(VERB_GET_VM_VNI, vm_vni_get_handler),
-	KEYENT(VERB_GET_ALL_VM_VNI, vm_vni_get_all_handler),
 
 	KEYENT(VERB_GET_VX_ND, nd_vx_get_handler),
 	KEYENT(VERB_SET_VX_ND, nd_vx_set_handler),
