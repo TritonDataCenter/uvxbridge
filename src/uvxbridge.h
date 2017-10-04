@@ -170,11 +170,11 @@ enum verb {
 };
 
 enum verb_error {
-		ERR_SUCCESS = 0,
-		ERR_PARSE,
-		ERR_INCOMPLETE,
-		ERR_NOMEM,
-		ERR_NOENTRY
+	ERR_SUCCESS = 0,
+	ERR_PARSE,
+	ERR_INCOMPLETE,
+	ERR_NOMEM,
+	ERR_NOENTRY
 };
 
 using std::string;
@@ -186,10 +186,10 @@ typedef map<uint64_t, uint32_t> revarp_t;
 typedef map<struct in6_addr, uint64_t> nd6_t;
 typedef map<uint64_t,  struct in6_addr> revnd6_t;
 typedef struct l2_table {
-		arp_t l2t_v4;
-		revarp_t l2t_rev_v4;
-		nd6_t l2t_v6;
-		revnd6_t l2t_rev_v6;
+	arp_t l2t_v4;
+	revarp_t l2t_rev_v4;
+	nd6_t l2t_v6;
+	revnd6_t l2t_rev_v6;
 } l2tbl_t;
 
 typedef union vni_entry {
@@ -213,26 +213,26 @@ union vxlan_sockaddr {
 	struct in6_addr	in6;
 };
 typedef struct vxlan_ftable_entry {
-		union vxlan_sockaddr vfe_raddr;
-		uint64_t vfe_v6:1;
-		uint64_t vfe_gen:15;
-		uint64_t vfe_expire:48;
+	union vxlan_sockaddr vfe_raddr;
+	uint64_t vfe_v6:1;
+	uint64_t vfe_gen:15;
+	uint64_t vfe_expire:48;
 } vfe_t;
 
 typedef pair<uint64_t, vfe_t> fwdent;
 typedef map<uint64_t, vfe_t> ftable_t;
 
 typedef struct vxlan_state {
-		/* forwarding table */
-		ftable_t vs_ftable;
+	/* forwarding table */
+	ftable_t vs_ftable;
 
-		/* vx nd table */
-		l2tbl_t vs_l2_vx;
+	/* vx nd table */
+	l2tbl_t vs_l2_vx;
 
-		/* phys nd table */
-		l2tbl_t vs_l2_phys;
+	/* phys nd table */
+	l2tbl_t vs_l2_phys;
 
-		/* default route */
+	/* default route */
 
 } vxstate_t;
 
