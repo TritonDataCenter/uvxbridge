@@ -182,16 +182,36 @@ enum verb_error {
 	ERR_PARSE,
 	ERR_INCOMPLETE,
 	ERR_NOMEM,
-	ERR_NOENTRY
+	ERR_NOENTRY,
+	ERR_NOTIMPL
 };
 
 using std::string;
 using std::pair;
 using std::map;
+#define s6_addr32 __u6_addr.__u6_addr32
+
+struct in6cmp {
+	bool
+	operator() (const in6_addr& lhs, const in6_addr& rhs) const
+	{
+			uint32_t tmp;
+
+			if ((tmp = (rhs.s6_addr32[0] - lhs.s6_addr32[0])) != 0)
+				return tmp > 0;
+			if ((tmp = (rhs.s6_addr32[1] - lhs.s6_addr32[1])) != 0)
+				return tmp > 0;
+			if ((tmp = (rhs.s6_addr32[2] - lhs.s6_addr32[2])) != 0)
+				return tmp > 0;
+			if ((tmp = (rhs.s6_addr32[3] - lhs.s6_addr32[3])) != 0)
+				return tmp > 0;
+			return true;
+	}
+};
 
 typedef map<uint32_t, uint64_t> arp_t;
 typedef map<uint64_t, uint32_t> revarp_t;
-typedef map<struct in6_addr, uint64_t> nd6_t;
+typedef map<struct in6_addr, uint64_t, in6cmp> nd6_t;
 typedef map<uint64_t,  struct in6_addr> revnd6_t;
 typedef struct l2_table {
 	arp_t l2t_v4;
@@ -213,12 +233,12 @@ typedef struct vm_vni_table {
 } vnitbl_t;
 
 
-union vxlan_sockaddr {
+union vxlan_in_addr {
 	struct in_addr	in4;
 	struct in6_addr	in6;
 };
 typedef struct vxlan_ftable_entry {
-	union vxlan_sockaddr vfe_raddr;
+	union vxlan_in_addr vfe_raddr;
 	uint64_t vfe_v6:1;
 	uint64_t vfe_gen:15;
 	uint64_t vfe_expire:48;

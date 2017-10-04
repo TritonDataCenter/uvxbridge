@@ -42,8 +42,12 @@ static const char *err_list[] = {
 	ERRENT(ERR_SUCCESS),
 	ERRENT(ERR_PARSE),
 	ERRENT(ERR_INCOMPLETE),
-	ERRENT(ERR_NOENTRY)
+	ERRENT(ERR_NOMEM),
+	ERRENT(ERR_NOENTRY),
+	ERRENT(ERR_NOTIMPL)
 };
+
+#define UNIMPLEMENTED(seqno) dflt_result(seqno, ERR_NOTIMPL)
 
 enum value_type {
 	TAG_NUMERIC = 0x1,
@@ -143,7 +147,6 @@ parse_value::~parse_value()
 }
 
 typedef int (*cmdhandler_t)(cmdmap_t &map, uint64_t seqno, vxstate_t&, string&);
-#define s6_addr32 __u6_addr.__u6_addr32
 
 static int
 fte_fill(vfe_t *fe, char *ip, uint64_t expire)
@@ -317,10 +320,48 @@ nd_get_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
 	enum verb_error err;
 	string tmp;
+	result_map rmap;
+	uint64_t mac;
+	char buf[16];
+	union vxlan_in_addr raddr;
+	int rc;
+	char *ip;
+	bool v6;
 
+	if (cmdmap_get_str(map, "raddr", &ip)) {
+		result = dflt_result(seqno, ERR_INCOMPLETE);
+		return EINVAL;
+	}
+	v6 = (index(ip, ':') != NULL);
+	if (v6)
+		rc = inet_pton(AF_INET6, ip, &raddr.in6);
+	else
+		rc = inet_pton(AF_INET, ip, &raddr.in4);
+	if (rc) {
+		result = dflt_result(seqno, ERR_PARSE);
+		return EINVAL;
+	}
+	if (v6) {
+		auto it = tbl.l2t_v6.find(raddr.in6);
+		if (it == tbl.l2t_v6.end()) {
+			goto noentry;
+		}
+		mac = it->second;
+	} else {
+		auto it = tbl.l2t_v4.find(raddr.in4.s_addr);
+		if (it == tbl.l2t_v4.end()) {
+			goto noentry;
+		}
+		mac = it->second;
+	}
+	snprintf(buf, 16, "0x%lX", be64toh(mac));
+	rmap.insert("mac", buf);
 	err = ERR_SUCCESS;
-	result = gen_result(seqno, err, tmp);
+	result = gen_result(seqno, err, rmap.to_str());
 	return 0;
+  noentry:
+	result = dflt_result(seqno, ERR_NOENTRY);
+	return ENOENT;
 }
 
 static int
@@ -328,7 +369,12 @@ nd_set_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
 	enum verb_error err;
 	string tmp;
+	uint64_t mac;
 
+	if (cmdmap_get_num(map, "mac", mac)) {
+		result = dflt_result(seqno, ERR_INCOMPLETE);
+		return EINVAL;
+	}
 	err = ERR_SUCCESS;
 	result = gen_result(seqno, err, tmp);
 	return 0;
@@ -339,7 +385,12 @@ nd_del_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
 	enum verb_error err;
 	string tmp;
+	uint64_t mac;
 
+	if (cmdmap_get_num(map, "mac", mac)) {
+		result = dflt_result(seqno, ERR_INCOMPLETE);
+		return EINVAL;
+	}
 	err = ERR_SUCCESS;
 	result = gen_result(seqno, err, tmp);
 	return 0;
@@ -458,48 +509,56 @@ vm_vni_get_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &resu
 static int
 vm_vni_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
+	result = UNIMPLEMENTED(seqno);
 	return 0;
 }
 
 static int
 route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
+	result = UNIMPLEMENTED(seqno);
 	return 0;
 }
 
 static int
 route_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
+	result = UNIMPLEMENTED(seqno);
 	return 0;
 }
 
 static int
 suspend_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
+	result = UNIMPLEMENTED(seqno);
 	return 0;
 }
 
 static int
 resume_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
+	result = UNIMPLEMENTED(seqno);
 	return 0;
 }
 
 static int
 barrier_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
+	result = UNIMPLEMENTED(seqno);
 	return 0;
 }
 
 static int
 begin_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
+	result = UNIMPLEMENTED(seqno);
 	return 0;
 }
 
 static int
 commit_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
+	result = UNIMPLEMENTED(seqno);
 	return 0;
 }
 
