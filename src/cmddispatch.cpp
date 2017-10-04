@@ -140,9 +140,17 @@ fte_fill(vfe_t *fe, char *ip, uint64_t expire)
 		return 0;
 }
 
-static string
-format_map(cmdmap_t &map)
+struct result_map {
+		cmdmap_t map;
+		void insert(const char *key, uint64_t value);
+		void insert(const char *key, char *value);
+		string to_str();
+};
+
+string
+result_map::to_str()
 {
+		cmdmap_t &map = this->map;
 		string result = string("( ");
 		char buf[64];
 		for (auto it = map.begin(); it != map.end(); it++) {
@@ -158,13 +166,25 @@ format_map(cmdmap_t &map)
 		return result;
 }
 
+void
+result_map::insert(const char *key, uint64_t value)
+{
+		this->map.insert(cmdent(string(key), parse_value(value)));
+}
+
+void
+result_map::insert(const char *key, char *value)
+{
+		this->map.insert(cmdent(string(key), parse_value(value)));
+}
+
 static int
 fte_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
 		uint64_t mac, expire;
 		char *ip;
 		int gen = 0;
-		cmdmap_t result_map;
+		result_map rmap;
 		enum verb_error err = ERR_INCOMPLETE;
 
 		if (cmdmap_get_num(map, "mac", mac)) {
@@ -188,8 +208,8 @@ fte_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &resu
 				if (fte_fill(fe, ip, expire))
 						goto badparse;
 		}
-		result_map.insert(cmdent(string("gen"), parse_value(gen)));
-		result = gen_result(seqno, ERR_SUCCESS, format_map(result_map));
+		rmap.insert("gen", gen);
+		result = gen_result(seqno, ERR_SUCCESS, rmap.to_str());
 		return 0;
 badparse:
 		err = ERR_PARSE;
@@ -201,25 +221,63 @@ incomplete:
 static int
 fte_remove_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
+		uint64_t mac;
 
+		if (cmdmap_get_num(map, "mac", mac)) {
+				result = dflt_result(seqno, ERR_INCOMPLETE);
+				return EINVAL;
+		}
+		state.vs_ftable.erase(mac);
 		result = dflt_result(seqno, ERR_SUCCESS);
 		return 0;
+}
+
+static string
+vfe_to_str(vfe_t &fe)
+{
+		result_map rmap;
+		char buf[INET6_ADDRSTRLEN];
+
+		if (fe.vfe_v6)
+				inet_ntop(AF_INET6, &fe.vfe_raddr.in6, buf,  INET6_ADDRSTRLEN);
+		else
+				inet_ntop(AF_INET, &fe.vfe_raddr.in4, buf,  INET6_ADDRSTRLEN);
+		rmap.insert("raddr", buf);
+		rmap.insert("gen", fe.vfe_gen);
+		rmap.insert("expire", fe.vfe_expire);
+		return rmap.to_str();
 }
 
 static int
 fte_get_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
+		uint64_t mac;
+		result_map rmap;
 
+		if (cmdmap_get_num(map, "mac", mac)) {
+				result = dflt_result(seqno, ERR_INCOMPLETE);
+				return EINVAL;
+		}
+		auto it = state.vs_ftable.find(mac);
+		if (it == state.vs_ftable.end()) {
+				result = dflt_result(seqno, ERR_NOENTRY);
+				return ENOENT;
+		}
+		result = gen_result(seqno, ERR_SUCCESS, vfe_to_str(it->second));
 		return 0;
 }
 
 static int
 fte_get_all_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
-
+		auto &table = state.vs_ftable;
+		string tmp;
+		for (auto it = table.begin(); it != table.end(); it++)
+				tmp.append(vfe_to_str(it->second));
+		tmp.append(" ");
+		result = gen_result(seqno, ERR_SUCCESS, tmp);
 		return 0;
 }
-
 
 static int
 nd_phys_get_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
@@ -248,7 +306,6 @@ nd_phys_get_all_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state
 		
 		return 0;
 }
-
 
 static int
 nd_vx_get_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
