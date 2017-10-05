@@ -759,16 +759,16 @@ cmd_dispatch(int cfd, char *input, struct vxlan_state &state)
 {
 	const char *delim = "\n";
 	char *indexp;
-	string defrc, result;
+	string result;
 	int rc;
 
-	defrc = dflt_result(0, ERR_PARSE);
 	while ((indexp = strsep(&input, delim)) != NULL) {
-		if (cmd_dispatch_single(indexp, state, result))
-			result = defrc;
+		if (cmd_dispatch_single(indexp, state, result) && result.size() == 0)
+			continue;
 		D("result is %s size: %lu\n", result.c_str(), result.size());
 		if ((rc = write(cfd, result.c_str(), result.size())) < 0)
 			return errno;
+		result.clear();
 	}
 	return 0;
 }

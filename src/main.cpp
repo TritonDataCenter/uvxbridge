@@ -120,7 +120,7 @@ main(int argc, char *const argv[])
 	buf[4095] = '\0';
 	while ((cfd = accept(s, (struct sockaddr *)&peer_addr, &pa_size)) >= 0) {
 		int rc;
-		D("accepted connection %d", cfd);
+		D("accepted connection %d\n", cfd);
 		while (1) {
 			if ((bytes = read(cfd, buf, 4095)) < 0) {
 				close(cfd);
