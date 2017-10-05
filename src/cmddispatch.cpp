@@ -589,11 +589,18 @@ route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &re
 
 	rv6 = (index(raddr, ':') != NULL);
 	sv6 = (index(subnet, ':') != NULL);
-	if (rv6 ^ sv6)
+	if ((rv6 ^ sv6) || prefixlen > 128)
 		goto badparse;
 
-	result = UNIMPLEMENTED(seqno);
-	return 0;
+	if (!rv6 && prefixlen > 32)
+		goto badparse;
+
+	/* XXX temporary for version 0 */
+	if (!is_default || rv6) {
+		result = UNIMPLEMENTED(seqno);
+		return 0;
+	}
+	
   badparse:
 	result = dflt_result(seqno, ERR_PARSE);
 	return EINVAL;
