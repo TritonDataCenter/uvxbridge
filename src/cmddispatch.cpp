@@ -290,11 +290,17 @@ static void
 vfe_to_rmap(vfe_t &fe, result_map &rmap)
 {
 	char buf[INET6_ADDRSTRLEN];
+	struct in_addr in4;
+	struct in6_addr in6;
 
-	if (fe.vfe_v6)
-		inet_ntop(AF_INET6, &fe.vfe_raddr.in6, buf,  INET6_ADDRSTRLEN);
-	else
-		inet_ntop(AF_INET, &fe.vfe_raddr.in4, buf,  INET6_ADDRSTRLEN);
+	if (fe.vfe_v6) {
+		for (auto i = 0; i < 4; i++)
+			in6.s6_addr32[i] = be32toh(fe.vfe_raddr.in6.s6_addr32[i]);
+		inet_ntop(AF_INET6, &in6, buf,  INET6_ADDRSTRLEN);
+	} else {
+		in4.s_addr = ntohl(fe.vfe_raddr.in4.s_addr);
+		inet_ntop(AF_INET, &in4, buf,  INET6_ADDRSTRLEN);
+	}
 	rmap.insert("raddr", buf);
 	rmap.insert("gen", fe.vfe_gen);
 	rmap.insert("expire", fe.vfe_expire);
@@ -344,10 +350,12 @@ fte_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &res
 	result_map rmap;
 	string tmp;
 	auto &table = state.vs_ftable;
+
 	for (auto it = table.begin(); it != table.end(); it++) {
 		auto vit = state.vs_vni_table.mac2vni.find(it->first);
 		if (vit == state.vs_vni_table.mac2vni.end())
 			continue;
+		rmap.insert("mac", be64toh(it->first));
 		vnient_to_rmap(vit->second, rmap);
 		vfe_to_rmap(it->second, rmap);
 		tmp.append(rmap.to_str());
@@ -489,8 +497,33 @@ nd_del_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 static int
 nd_get_all_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 {
-	result = UNIMPLEMENTED(seqno);
-	return ENOTSUP;
+	result_map rmap;
+	char buf[INET6_ADDRSTRLEN];
+	struct in_addr in4;
+	struct in6_addr in6;
+	string tmp;
+
+	for (auto it = tbl.l2t_v4.begin(); it != tbl.l2t_v4.end(); it++) {
+		in4.s_addr = ntohl(it->first);
+		inet_ntop(AF_INET, &in4, buf,  INET6_ADDRSTRLEN);
+		rmap.insert("mac", be64toh(it->second));
+		rmap.insert("raddr", buf);
+		tmp.append(rmap.to_str());
+		tmp.append(" ");
+		rmap.clear();
+	}
+	for (auto it = tbl.l2t_v6.begin(); it != tbl.l2t_v6.end(); it++) {
+		for (auto i = 0; i < 4; i++)
+			in6.s6_addr32[i] = be32toh(it->first.s6_addr32[i]);
+		inet_ntop(AF_INET6, &in6, buf,  INET6_ADDRSTRLEN);
+		rmap.insert("mac", be64toh(it->second));
+		rmap.insert("raddr", buf);
+		tmp.append(rmap.to_str());
+		tmp.append(" ");
+		rmap.clear();
+	}
+	result = gen_result(seqno, ERR_SUCCESS, tmp);
+	return 0;
 }
 
 static int
@@ -541,48 +574,34 @@ nd_vx_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &r
 	return nd_get_all_handler(map, seqno, state.vs_l2_vx, result);
 }
 
-#if 0
-static int
-vm_vni_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
-{
-	enum verb_error err = ERR_INCOMPLETE;
-	uint64_t mac, vlanid, vxlanid;
-
-	if (cmdmap_get_num(map, "mac", mac))
-		goto incomplete;
-	if (cmdmap_get_num(map, "vlanid", vlanid))
-		goto incomplete;
-	if (cmdmap_get_num(map, "vxlanid", vxlanid))
-		goto incomplete;
-	/* XXX */
-	return 0;
- incomplete:
-	result = dflt_result(seqno, err);
-	return EINVAL;
-}
-
-static int
-vm_vni_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
-{
-	enum verb_error err = ERR_INCOMPLETE;
-	uint64_t mac;
-	mac_vni_map_t &fwd = state.vs_vni_table.mac2vni;
-
-	if (cmdmap_get_num(map, "mac", mac)) {
-		result = dflt_result(seqno, err);
-		return EINVAL;
-	}
-	result = dflt_result(seqno, ERR_SUCCESS);
-	fwd.erase(mac);
-	return 0;
-}
-#endif
-
 static int
 route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
+	char *raddr, *subnet, *netmask, *def;
+	int rv6, sv6, is_default = false;
+
+	if (cmdmap_get_str(map, "raddr", &raddr))
+		goto incomplete;
+	if (cmdmap_get_str(map, "subnet", &subnet))
+		goto incomplete;
+	if (cmdmap_get_str(map, "netmask", &netmask))
+		goto incomplete;
+	if (cmdmap_get_str(map, "default", &def))
+		is_default = (strcmp(def, "true") == 0);
+
+	rv6 = (index(raddr, ':') != NULL);
+	sv6 = (index(subnet, ':') != NULL);
+	if (rv6 ^ sv6)
+		goto badparse;
+
 	result = UNIMPLEMENTED(seqno);
 	return 0;
+  badparse:
+	result = dflt_result(seqno, ERR_PARSE);
+	return EINVAL;
+  incomplete:
+	result = dflt_result(seqno, ERR_INCOMPLETE);
+	return EINVAL;
 }
 
 static int
