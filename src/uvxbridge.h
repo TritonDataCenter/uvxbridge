@@ -39,109 +39,109 @@
  *                vlanid: 2 byte value
  *                raddr: <4-tuple| v6addr w/ no symbolic>
  *             expire: 8 bytes - useconds
- *         (result:seqno error:<errstr> (gen: 4 byte)?)
+ *         ((result seqno) (error <errstr>) ((gen 4 byte))?)
  *
  *  Get forwarding entry details
  * - GET_FTE:<seqno> mac: 6 bytes
  *               vxlanid: 3 byte value
 *                 vlanid: 2 byte value
- *       (result:<seqno> error:<errstr> (raddr: <4-tuple| v6addr w/ no symbolic>
- *              expire: 8 bytes - useconds
- *                 gen: 4 byte)?)
+ *       ((result <seqno>) (error <errstr>) ((raddr <4-tuple| v6addr w/ no symbolic>)
+ *              (expire 8 bytes) # useconds
+ *                 (gen 4 byte))?)
  * 
  * - REMOVE_FTE:<seqno> mac: 6 bytes
  *                  vxlanid: 3 byte value
- *       (result:<seqno> error:<errstr>)
+ *       ((result <seqno>) (error <errstr>))
  *
  * - GET_ALL_FTE:<seqno>
  *         (result: error:<errstr>
- *                  (mac: 6 bytes
- *               vxlanid: 3 byte value
- *                vlanid: 2 byte value
- *                 raddr: <4-tuple| v6addr w/ no symbolic>
- *                expire: 8 bytes - useconds
- *                   gen: 4 byte)*)  
+ *                  ((mac 6 bytes)
+ *               (vxlanid 3 byte value)
+ *                (vlanid 2 byte value)
+ *                 (raddr <4-tuple| v6addr w/ no symbolic>)
+ *                (expire 8 bytes) # useconds
+ *                   (gen 4 bytes))*)
  *
  *
  *   manage physical L2 table entries for remote IP
  * - SET_PHYS_ND:<seqno> mac: big-endian 6 bytes raddr: <4-tuple| v6addr w/ no symbolic>
- *   (result:<seqno> error:<errstr>)
+ *   ((result <seqno>) (error <errstr>))
  *
  * - DEL_PHYS_ND:<seqno> mac: big-endian 6 bytes | raddr: <4-tuple| v6addr w/ no symbolic>
- *   (result:<seqno> error:<errstr>)
+ *   ((result <seqno>) (error <errstr>))
  *
  * - GET_PHYS_ND:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
- *      (result:<seqno>  error:<errstr> (mac: big-endian 6 bytes)?)
+ *      ((result <seqno>)  (error <errstr>) ((mac big-endian 6 bytes))?)
  *
  * - GET_ALL_PHYS_ND:<seqno>
- *       (result:<seqno> error:<errstr> (mac: big-endian 6 bytes
- *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
+ *       ((result <seqno>) (error <errstr>) ((mac big-endian 6 bytes)
+ *               (raddr <4-tuple| v6addr w/ no symbolic>))*)
  *
  *
  *   manage vxlan L2 table entries for remote IP
  * - SET_VX_ND:<seqno> mac: big-endian 6 bytes raddr: <4-tuple| v6addr w/ no symbolic>
- *   (result:<seqno> error:<errstr>)
+ *   ((result <seqno>) (error <errstr>))
  *
  * - DEL_VX_ND:<seqno> mac: big-endian 6 bytes |
  *             raddr: <4-tuple| v6addr w/ no symbolic>
- *   (result:<seqno> error:<errstr>)
+ *   ((result <seqno>) (error <errstr>))
  *
  * - GET_VX_ND:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
- *      (result:<seqno> error:<errstr> (mac: big-endian 6 bytes)?)
+ *      ((result <seqno>) (error <errstr>) ((mac 6 bytes))?)
  *
  * - GET_ALL_VX_ND:<seqno>
- *       (result:<seqno> error:<errstr> (mac: big-endian 6 bytes
- *               raddr: <4-tuple| v6addr w/ no symbolic>)*)
+ *       ((result <seqno>) (error <errstr>) ((mac 6 bytes)
+ *               (raddr <4-tuple| v6addr w/ no symbolic>))*)
  *
  *
  * - UPDATE_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
  *                       subnet: <4-tuple| v6addr w/ no symbolic>
  *                    prefixlen: 2 byte value
  *                      [default:<true|false>]?
- *       (result:<seqno> error:<errstr> (gen: 4 bytes)?)
+ *       ((result <seqno>) (error <errstr>) ((gen 4 bytes))?)
  *
  * - REMOVE_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
- *       (result:<seqno> error:<errstr>)
+ *       ((result <seqno>) (error <errstr>))
  *
  * - GET_ALL_ROUTE:<seqno>
- *       (result:<seqno> error:<errstr>
- *               (raddr: <4-tuple| v6addr w/ no symbolic>
- *                       subnet: <4-tuple| v6addr w/ no symbolic>
- *                    prefixlen: 2 byte value
- *                      default:<true|false>)*)
+ *       ((result <seqno>) (error <errstr>)
+ *               ((raddr <4-tuple| v6addr w/ no symbolic>)
+ *                (subnet <4-tuple| v6addr w/ no symbolic>)
+ *                (prefixlen 2 byte value)
+ *                (default <true|false>))*)
  *
  *
  *  Stop forwarding packets
  * - SUSPEND:<seqno>
- *       (result:<seqno> error:<errstr>)
+ *       ((result <seqno>) (error <errstr>))
  *
  *  Resume forwarding packets
  * - RESUME:<seqno>
- *       (result:<seqno> error:<errstr>)
+ *       ((result <seqno>) (error <errstr>))
  *
  *
  *  Signal that all seqno prior have completed, error value is the
  *  first error encountered since the last BARRIER issued, if any.
  * - BARRIER:<seqno>
- *       (result:<seqno> error:<errstr>)
+ *       ((result <seqno>) (error <errstr>))
  *
  *   Syntactic sugar for BARRIER+SUSPEND
  * - BEGIN_UPDATE:<seqno>
- *       (result:<seqno> error:<errstr>)
+ *       ((result <seqno>) (error <errstr>))
  *
  *   Syntactic sugar for BARRIER+RESUME
  * - COMMIT_UPDATE:<seqno>
- *       (result:<seqno> error:<errstr>)
+ *       ((result <seqno>) (error <errstr>))
  *
  *
  * Sample syntax - with the command shown in C syntax to indicate literal quotes
  *                 and newlines:
  * client -> server: "VERB_UPDATE_ROUTE:0x1 raddr:\"192.168.0.1\" default:\"true\" subnet:\"192.168.0.0\" prefixlen:0x10\n"
- * server -> client: "(result:0x1 error:\"ERR_SUCCESS\" (gen:0x0))\n"
+ * server -> client: "((result 0x1) (error \"ERR_SUCCESS\") ((gen 0x0)))\n"
  * client -> server: "VERB_SET_PHYS_ND:0x2 raddr:\"192.168.0.1\" mac:0xbabecafebeef\n"
- * server -> client: "(result:0x2 error:\"ERR_SUCCESS\")"
+ * server -> client: "((result 0x2) (error \"ERR_SUCCESS\"))"
  * client -> server: "VERB_GET_PHYS_ND_ALL:0x3\n"
- * server -> client: "(result:0x3 error:\"ERR_SUCCESS\" (raddr:\"192.168.0.1\" mac:0xbabecafebeef))\n"
+ * server -> client: "((result 0x3) (error \"ERR_SUCCESS\") ((raddr \"192.168.0.1\") (mac 0xbabecafebeef)))\n"
  */
 
 enum verb {
