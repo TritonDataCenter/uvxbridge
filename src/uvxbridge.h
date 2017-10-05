@@ -256,6 +256,6 @@ typedef struct vxlan_state {
 
 
 
-int parse_input(char *input, vxstate_t &state, string &result);
+int cmd_dispatch(int cfd, char *input, vxstate_t &state);
 
 #endif

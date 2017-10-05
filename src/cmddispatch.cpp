@@ -29,10 +29,11 @@
 #include <sys/types.h>
 #include <sys/endian.h>
 #include <stdio.h>
+#include <unistd.h>
+
 #include <iostream>
 #include <map>
 #include <string>
-
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include "uvxbridge.h"
@@ -718,8 +719,8 @@ gather_args(cmdmap_t &map, char *input)
 	}
 }
 
-int
-parse_input(char *input, struct vxlan_state &state, string &result)
+static int
+cmd_dispatch_single(char *input, struct vxlan_state &state, string &result)
 {
 	cmdmap_t map;
 	const char *delim = " ";
@@ -747,3 +748,18 @@ parse_input(char *input, struct vxlan_state &state, string &result)
 	return verbent->handler(map, seqno, state, result);
 }
 
+int
+cmd_dispatch(int cfd, char *input, struct vxlan_state &state)
+{
+	const char *delim = "\n";
+	char *indexp;
+	string result;
+	int rc;
+
+	while ((indexp = strsep(&input, delim)) != NULL) {
+		cmd_dispatch_single(indexp, state, result);
+		if ((rc = write(cfd, result.c_str(), result.size())) < 0)
+			return errno;
+	}
+	return 0;
+}
