@@ -103,6 +103,13 @@
  * - REMOVE_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
  *       (result:<seqno> error:<errstr>)
  *
+ * - GET_ALL_ROUTE:<seqno>
+ *       (result:<seqno> error:<errstr>
+ *               (raddr: <4-tuple| v6addr w/ no symbolic>
+ *                       subnet: <4-tuple| v6addr w/ no symbolic>
+ *                      netmask: hex string
+ *                      default:<true|false>)*)
+ *
  *
  *  Stop forwarding packets
  * - SUSPEND:<seqno>
@@ -154,6 +161,7 @@ enum verb {
 
 	VERB_UPDATE_ROUTE = 0x30,
 	VERB_REMOVE_ROUTE = 0x31,
+	VERB_GET_ALL_ROUTE = 0x32,
 
 	VERB_SET_VX_ND = 0x40,
 	VERB_GET_VX_ND = 0x41,

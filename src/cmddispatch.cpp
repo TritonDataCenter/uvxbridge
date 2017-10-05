@@ -619,6 +619,13 @@ route_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &re
 }
 
 static int
+route_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
+{
+	result = UNIMPLEMENTED(seqno);
+	return 0;
+}
+
+static int
 suspend_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
 	result = UNIMPLEMENTED(seqno);
@@ -680,6 +687,7 @@ static ent_t ent_list[] = {
 
 	KEYENT(VERB_UPDATE_ROUTE, route_update_handler),
 	KEYENT(VERB_REMOVE_ROUTE, route_remove_handler),
+	KEYENT(VERB_GET_ALL_ROUTE, route_get_all_handler),
 
 	KEYENT(VERB_SUSPEND, suspend_handler),
 	KEYENT(VERB_RESUME, resume_handler),
