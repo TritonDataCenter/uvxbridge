@@ -111,7 +111,7 @@ dflt_result(uint64_t seqno, enum verb_error err)
 {
 	char buf[64];
 
-	snprintf(buf, 64, "(result:0x%lX error:%s)\n", seqno, err_list[err]);
+	snprintf(buf, 64, "((result 0x%lX) (error %s))\n", seqno, err_list[err]);
 	return string(buf);
 }
 
@@ -120,11 +120,11 @@ gen_result(uint64_t seqno, enum verb_error err, string input)
 {
 	int len = input.size() + 64;
 	char *buf;
-	if (err != ERR_SUCCESS)
+	if (err != ERR_SUCCESS || input.size() == 0)
 		return dflt_result(seqno, err);
 	if ((buf = static_cast<char *>(malloc(len))) == NULL)
 		return dflt_result(seqno, ERR_NOMEM);
-	snprintf(buf, len, "(result:0x%lX error:%s %s)\n", seqno, err_list[err], input.c_str());
+	snprintf(buf, len, "((result 0x%lX) (error %s) %s)\n", seqno, err_list[err], input.c_str());
 	auto s = string(buf);
 	free(buf);
 	return s;
@@ -198,10 +198,10 @@ result_map::to_str()
 	char buf[64];
 	for (auto it = map.begin(); it != map.end(); it++) {
 		if (it->second.tag == TAG_NUMERIC)
-			snprintf(buf, 64, "%s:0x%lX ", it->first.c_str(),
+			snprintf(buf, 64, "(%s 0x%lX) ", it->first.c_str(),
 					 it->second.value.numeric);
 		else
-			snprintf(buf, 64, "%s:\"%s\"", it->first.c_str(),
+			snprintf(buf, 64, "(%s \"%s\") ", it->first.c_str(),
 					 it->second.value.text);
 		result.append(buf);
 	}
