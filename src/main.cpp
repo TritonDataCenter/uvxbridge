@@ -48,14 +48,22 @@ usage(void)
 	exit(0);
 }
 
+#ifdef DEBUG
+#define D printf
+#else
+#define D(...)
+#endif
+
 
 int
 main(int argc, char *const argv[])
 {
 	int ch, s, bytes, cfd;
-	long port = 31337;
+	long port = 0;
 	const char *file = "default";
-	struct sockaddr_un addr, peer_addr;
+	struct sockaddr_un un;
+	struct sockaddr_in in;
+	struct sockaddr peer_addr;
 	socklen_t pa_size;
 	char buf[4096];
 	vxstate_t state;
@@ -73,32 +81,54 @@ main(int argc, char *const argv[])
 				usage();
 		}
 	}
-	if ((s = socket(PF_UNIX, SOCK_STREAM, 0)) < 0) {
-		perror("socket failed");
-		exit(1);
-	}
-	bzero(&addr, sizeof(struct sockaddr_un));
-	addr.sun_family = AF_UNIX;
-	strncpy(addr.sun_path, file, sizeof(addr.sun_path) - 1);
-	if (bind(s, (struct sockaddr *)&addr, sizeof(struct sockaddr_un)) < 0) {
-		perror("bind failed");
-		exit(1);
+
+	if (port == 0) {
+		if ((s = socket(PF_UNIX, SOCK_STREAM, 0)) < 0) {
+			perror("socket failed");
+			exit(1);
+		}
+		bzero(&un, sizeof(struct sockaddr_un));
+		un.sun_family = AF_UNIX;
+		strncpy(un.sun_path, file, sizeof(un.sun_path) - 1);
+		if (bind(s, (struct sockaddr *)&un, sizeof(struct sockaddr_un)) < 0) {
+			perror("bind failed");
+			exit(1);
+		}
+	} else {
+		int opt = 1;
+		pa_size = sizeof(int);
+		if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
+			perror("socket failed");
+			exit(1);
+		}
+		setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &opt, pa_size);
+		bzero(&in, sizeof(struct sockaddr_in));
+		in.sin_len = sizeof(struct sockaddr_in);
+		in.sin_family = AF_INET;
+		in.sin_port = htons(port);
+		in.sin_addr.s_addr = inet_addr("127.0.0.1");
+		if (bind(s, (struct sockaddr *)&in, sizeof(struct sockaddr_in)) < 0) {
+			perror("bind failed");
+			exit(1);
+		}
 	}
 	if (listen(s, 1) < 0) {
 		perror("listen failed");
 		exit(1);
-	
 	}
 	bzero(buf, 4096);
 	buf[4095] = '\0';
 	while ((cfd = accept(s, (struct sockaddr *)&peer_addr, &pa_size)) >= 0) {
+		int rc;
+		D("accepted connection %d", cfd);
 		while (1) {
 			if ((bytes = read(cfd, buf, 4095)) < 0) {
 				close(cfd);
 				break;
 			}
-			cmd_dispatch(cfd, buf, state);
-			
+			D("dispatching cmd of %d bytes\n", bytes);
+			rc = cmd_dispatch(cfd, buf, state);
+			D("cmd_dispatch: %d\n", rc);
 			bzero(buf, bytes);
 		}
 	}

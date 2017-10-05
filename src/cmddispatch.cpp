@@ -38,6 +38,12 @@
 #include <arpa/inet.h>
 #include "uvxbridge.h"
 
+#ifdef DEBUG
+#define D printf
+#else
+#define D(...)
+#endif
+
 #define ERRENT(error) #error
 static const char *err_list[] = {
 	ERRENT(ERR_SUCCESS),
@@ -105,7 +111,7 @@ dflt_result(uint64_t seqno, enum verb_error err)
 {
 	char buf[64];
 
-	snprintf(buf, 64, "(result:0x%lX error:%s)", seqno, err_list[err]);
+	snprintf(buf, 64, "(result:0x%lX error:%s)\n", seqno, err_list[err]);
 	return string(buf);
 }
 
@@ -118,7 +124,7 @@ gen_result(uint64_t seqno, enum verb_error err, string input)
 		return dflt_result(seqno, err);
 	if ((buf = static_cast<char *>(malloc(len))) == NULL)
 		return dflt_result(seqno, ERR_NOMEM);
-	snprintf(buf, len, "(result:0x%lX error:%s %s)", seqno, err_list[err], input.c_str());
+	snprintf(buf, len, "(result:0x%lX error:%s %s)\n", seqno, err_list[err], input.c_str());
 	auto s = string(buf);
 	free(buf);
 	return s;
@@ -753,11 +759,14 @@ cmd_dispatch(int cfd, char *input, struct vxlan_state &state)
 {
 	const char *delim = "\n";
 	char *indexp;
-	string result;
+	string defrc, result;
 	int rc;
 
+	defrc = dflt_result(0, ERR_PARSE);
 	while ((indexp = strsep(&input, delim)) != NULL) {
-		cmd_dispatch_single(indexp, state, result);
+		if (cmd_dispatch_single(indexp, state, result))
+			result = defrc;
+		D("result is %s size: %lu\n", result.c_str(), result.size());
 		if ((rc = write(cfd, result.c_str(), result.size())) < 0)
 			return errno;
 	}

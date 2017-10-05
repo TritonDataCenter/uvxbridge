@@ -1,5 +1,5 @@
 
-CFLAGS= -Wall -std=c++11
+CFLAGS= -Wall -std=c++11 -DDEBUG
 
 main.o: main.cpp uvxbridge.h
 	$(CXX) $(CFLAGS) -c main.cpp
@@ -11,3 +11,6 @@ dispatch_test: main.o cmddispatch.o
 
 
 all: dispatch_test
+
+clean:
+	rm -f dispatch_test *.o *~
