@@ -170,14 +170,14 @@ fte_fill(vfe_t *fe, char *ip, uint64_t expire)
 		pin6dst = fe->vfe_raddr.in6.s6_addr32;
 		pin6src = in6.s6_addr32;
 		for (int i = 0; i < 4; i++)
-			pin6dst[i] = htonl(pin6src[i]);
+			pin6dst[i] = pin6src[i];
 	} else {
 		struct in_addr	in4;
 
 		fe->vfe_v6 = 0;
 		if (inet_aton(ip, &in4))
 			return EINVAL;
-		fe->vfe_raddr.in4.s_addr = htonl(in4.s_addr);
+		fe->vfe_raddr.in4.s_addr = in4.s_addr;
 	}
 	return 0;
 }
@@ -301,11 +301,9 @@ vfe_to_rmap(vfe_t &fe, result_map &rmap)
 	struct in6_addr in6;
 
 	if (fe.vfe_v6) {
-		for (auto i = 0; i < 4; i++)
-			in6.s6_addr32[i] = be32toh(fe.vfe_raddr.in6.s6_addr32[i]);
 		inet_ntop(AF_INET6, &in6, buf,  INET6_ADDRSTRLEN);
 	} else {
-		in4.s_addr = ntohl(fe.vfe_raddr.in4.s_addr);
+		in4.s_addr = fe.vfe_raddr.in4.s_addr;
 		inet_ntop(AF_INET, &in4, buf,  INET6_ADDRSTRLEN);
 	}
 	rmap.insert("raddr", buf);
@@ -443,15 +441,13 @@ nd_set_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 	}
 	mac = htobe64(mac);
 	if (v6) {
-		for (auto i = 0; i < 4; i++)
-			raddr.in6.s6_addr32[i] = be32toh(raddr.in6.s6_addr32[i]);
 		auto it = tbl.l2t_v6.find(raddr.in6);
 		if (it != tbl.l2t_v6.end())
 			it->second = mac;
 		else
 			tbl.l2t_v6.insert(pair<struct in6_addr, uint64_t>(raddr.in6, mac));
 	} else {
-		uint32_t addr4 = be32toh(raddr.in4.s_addr);
+		uint32_t addr4 = raddr.in4.s_addr;
 
 		auto it = tbl.l2t_v4.find(addr4);
 		if (it != tbl.l2t_v4.end())
@@ -486,13 +482,9 @@ nd_del_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 		return EINVAL;
 	}
 	if (v6) {
-		for (auto i = 0; i < 4; i++)
-			raddr.in6.s6_addr32[i] = be32toh(raddr.in6.s6_addr32[i]);
 		tbl.l2t_v6.erase(raddr.in6);
 	} else {
-		uint32_t addr4 = be32toh(raddr.in4.s_addr);
-
-		tbl.l2t_v4.erase(addr4);
+		tbl.l2t_v4.erase(raddr.in4.s_addr);
 	}
 	result = dflt_result(seqno, ERR_SUCCESS);
 	return 0;
@@ -511,7 +503,7 @@ nd_get_all_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 	string tmp;
 
 	for (auto it = tbl.l2t_v4.begin(); it != tbl.l2t_v4.end(); it++) {
-		in4.s_addr = ntohl(it->first);
+		in4.s_addr = it->first;
 		inet_ntop(AF_INET, &in4, buf,  INET6_ADDRSTRLEN);
 		rmap.insert("mac", be64toh(it->second));
 		rmap.insert("raddr", buf);
@@ -520,8 +512,6 @@ nd_get_all_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 		rmap.clear();
 	}
 	for (auto it = tbl.l2t_v6.begin(); it != tbl.l2t_v6.end(); it++) {
-		for (auto i = 0; i < 4; i++)
-			in6.s6_addr32[i] = be32toh(it->first.s6_addr32[i]);
 		inet_ntop(AF_INET6, &in6, buf,  INET6_ADDRSTRLEN);
 		rmap.insert("mac", be64toh(it->second));
 		rmap.insert("raddr", buf);
