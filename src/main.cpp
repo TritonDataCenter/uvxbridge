@@ -68,7 +68,7 @@ main(int argc, char *const argv[])
 	char buf[4096];
 	vxstate_t state;
 
-	while ((ch = getopt(argc, argv, "p:")) != -1) {
+	while ((ch = getopt(argc, argv, "p:f:")) != -1) {
 		switch (ch) {
 			case 'p':
 				port = strtol(optarg, NULL, 10);
