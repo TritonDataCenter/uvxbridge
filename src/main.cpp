@@ -126,6 +126,8 @@ main(int argc, char *const argv[])
 				close(cfd);
 				break;
 			}
+			if (bytes == 0)
+				continue;
 			D("dispatching cmd of %d bytes\n", bytes);
 			rc = cmd_dispatch(cfd, buf, state);
 			D("cmd_dispatch: %d\n", rc);

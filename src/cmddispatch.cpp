@@ -574,14 +574,15 @@ nd_vx_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &r
 static int
 route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
-	char *raddr, *subnet, *netmask, *def;
+	char *raddr, *subnet, *def;
+	uint64_t prefixlen;
 	int rv6, sv6, is_default = false;
 
 	if (cmdmap_get_str(map, "raddr", &raddr))
 		goto incomplete;
 	if (cmdmap_get_str(map, "subnet", &subnet))
 		goto incomplete;
-	if (cmdmap_get_str(map, "netmask", &netmask))
+	if (cmdmap_get_num(map, "prefixlen", prefixlen))
 		goto incomplete;
 	if (cmdmap_get_str(map, "default", &def))
 		is_default = (strcmp(def, "true") == 0);
@@ -758,15 +759,18 @@ cmd_dispatch(int cfd, char *input, struct vxlan_state &state)
 	const char *delim = "\n";
 	char *indexp;
 	string result;
-	int rc;
+	int rc, cnt;
 
+	cnt = 0;
 	while ((indexp = strsep(&input, delim)) != NULL) {
-		if (cmd_dispatch_single(indexp, state, result) && result.size() == 0)
+		if ((rc = cmd_dispatch_single(indexp, state, result)) && result.size() == 0)
 			continue;
-		D("result is %s size: %lu\n", result.c_str(), result.size());
+		D("result is %s size: %lu rc: %d\n", result.c_str(), result.size(), rc);
 		if ((rc = write(cfd, result.c_str(), result.size())) < 0)
 			return errno;
 		result.clear();
+		cnt++;
 	}
+	D("parsed %d lines\n", cnt);
 	return 0;
 }
