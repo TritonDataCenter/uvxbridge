@@ -30,6 +30,10 @@
 #define UVXBRIDGE_H_
 
 #include <netinet/in.h>
+#include <iostream>
+#include <map>
+#include <string>
+
 /*  
  * VERB command set
  * 
@@ -280,5 +284,6 @@ typedef struct vxlan_state {
 
 
 int cmd_dispatch(int cfd, char *input, vxstate_t &state);
+int run_datapath(vxstate_t &state);
 
 #endif

@@ -35,10 +35,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include <iostream>
-#include <map>
-#include <string>
-
 #include "uvxbridge.h"
 
 static void

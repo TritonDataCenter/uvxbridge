@@ -718,7 +718,7 @@ barrier_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string
 static int
 begin_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
-	D("update forwarding state at %lu\n");
+	D("update forwarding state at %lu\n", seqno);
 	state.in_txn = 1;
 	state.txn_error = ERR_SUCCESS;
 	result = dflt_result(seqno, ERR_SUCCESS);
@@ -853,6 +853,9 @@ cmd_dispatch(int cfd, char *input, struct vxlan_state &state)
 	while ((indexp = strsep(&input, delim)) != NULL) {
 		if ((rc = cmd_dispatch_single(indexp, state, result)) && result.size() == 0)
 			continue;
+		/* XXX --- need to propagate error up */
+		if (rc && state.in_txn && state.txn_error == ERR_SUCCESS)
+			state.txn_error = ERR_PARSE;
 		D("result is %s size: %lu rc: %d\n", result.c_str(), result.size(), rc);
 		if ((rc = write(cfd, result.c_str(), result.size())) < 0)
 			return errno;
