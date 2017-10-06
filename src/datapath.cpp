@@ -44,6 +44,11 @@ static int verbose = 0;
 static int do_abort = 0;
 //static int zerocopy = 1; /* enable zerocopy if possible */
 
+struct vxlan_header {
+	uint64_t vh_dhost:48;
+	uint64_t vh_shost:48;
+};
+
 enum direction {
 	EGRESS,
 	INGRESS
@@ -77,17 +82,32 @@ pkt_queued(struct nm_desc *d, int tx)
 	return tot;
 }
 
+/*
+ * If rxbuf contains a neighbor discovery request, save a
+ * response and return true
+ *
+ */
 static bool
 nd_request(char *rxbuf, int len, vxstate_t &state __unused)
 {
 	return false;
 }
+
+/*
+ * If there are pending neighbor discovery responses copy one 
+ * to txbuf and return true
+ *
+ */
 static bool
 nd_response(char *txbuf, uint16_t *len, vxstate_t &state __unused)
 {
 	return false;
 }
 
+/*
+ * If valid, encapsulate rxbuf in to txbuf
+ *
+ */
 static int
 vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 {
@@ -95,6 +115,10 @@ vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 	return 0;
 }
 
+/*
+ * If valid, deencapsulate rxbuf in to txbuf
+ *
+ */
 static int
 vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 {
