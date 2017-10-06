@@ -571,34 +571,63 @@ nd_vx_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &r
 	return nd_get_all_handler(map, seqno, state.vs_l2_vx, result);
 }
 
+static uint32_t
+genmask(int prefixlen)
+{
+		uint64_t mask = (1UL << prefixlen)-1;
+		mask <<= (32-prefixlen);
+		return static_cast<uint32_t>(mask);
+}
+
 static int
 route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
-	char *raddr, *subnet, *def;
+	char *ip, *def;
 	uint64_t prefixlen;
-	int rv6, sv6, is_default = false;
+	bool v6, is_default = false;
+	int domain;
+	rte_t ent;
 
-	if (cmdmap_get_str(map, "raddr", &raddr))
-		goto incomplete;
-	if (cmdmap_get_str(map, "subnet", &subnet))
+	if (cmdmap_get_str(map, "raddr", &ip))
 		goto incomplete;
 	if (cmdmap_get_num(map, "prefixlen", prefixlen))
 		goto incomplete;
 	if (cmdmap_get_str(map, "default", &def))
 		is_default = (strcmp(def, "true") == 0);
 
-	rv6 = (index(raddr, ':') != NULL);
-	sv6 = (index(subnet, ':') != NULL);
-	if ((rv6 ^ sv6) || prefixlen > 128)
+	bzero(&ent, sizeof(rte_t));
+	v6 = (index(ip, ':') != NULL);
+	domain = v6 ? AF_INET6 : AF_INET;
+	ent.ri_flags = RI_VALID;
+	if ((v6 && prefixlen > 128) || (!v6 && prefixlen > 32))
+		goto badparse;
+	if (inet_pton(domain, ip, &ent.ri_addr))
 		goto badparse;
 
-	if (!rv6 && prefixlen > 32)
-		goto badparse;
+	if (v6) {
+		int incr, prefixlenrem = prefixlen;
+
+		for (auto i = 0; i < 4 && prefixlenrem; i++) {
+			incr = std::min(32, prefixlenrem);
+			prefixlenrem -= incr;
+			ent.ri_mask.in6.s6_addr32[i] = genmask(incr);
+		}
+		ent.ri_flags |= RI_IPV6;
+	} else {
+		ent.ri_mask.in4.s_addr = genmask(prefixlen);
+	}
 
 	/* XXX temporary for version 0 */
-	if (!is_default || rv6) {
+	if (!is_default || v6) {
 		result = UNIMPLEMENTED(seqno);
 		return 0;
+	}
+	if (is_default) {
+		auto &dfltent = state.vs_dflt_rte;
+
+		if (dfltent.ri_flags & RI_VALID)
+			ent.ri_gen = dfltent.ri_gen + 1;
+		memcpy(&dfltent, &ent, sizeof(rte_t));
 	}
 	
   badparse:

@@ -44,7 +44,7 @@
  *  Get forwarding entry details
  * - GET_FTE:<seqno> mac: 6 bytes
  *               vxlanid: 3 byte value
-*                 vlanid: 2 byte value
+ *                 vlanid: 2 byte value
  *       ((result <seqno>) (error <errstr>) ((raddr <4-tuple| v6addr w/ no symbolic>)
  *              (expire 8 bytes) # useconds
  *                 (gen 4 byte))?)
@@ -95,7 +95,6 @@
  *
  *
  * - UPDATE_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
- *                       subnet: <4-tuple| v6addr w/ no symbolic>
  *                    prefixlen: 2 byte value
  *                      [default:<true|false>]?
  *       ((result <seqno>) (error <errstr>) ((gen 4 bytes))?)
@@ -106,7 +105,6 @@
  * - GET_ALL_ROUTE:<seqno>
  *       ((result <seqno>) (error <errstr>)
  *               ((raddr <4-tuple| v6addr w/ no symbolic>)
- *                (subnet <4-tuple| v6addr w/ no symbolic>)
  *                (prefixlen 2 byte value)
  *                (default <true|false>))*)
  *
@@ -231,16 +229,28 @@ typedef struct vm_vni_table {
 } vnitbl_t;
 
 
-union vxlan_in_addr {
+typedef union vxlan_in_addr {
 	struct in_addr	in4;
 	struct in6_addr	in6;
-};
+} vxin_t;
+
 typedef struct vxlan_ftable_entry {
 	union vxlan_in_addr vfe_raddr;
 	uint64_t vfe_v6:1;
 	uint64_t vfe_gen:15;
 	uint64_t vfe_expire:48;
 } vfe_t;
+
+
+#define RI_VALID	(1 << 0)
+#define RI_IPV6	(1 << 1)
+
+typedef struct routeinfo {
+	vxin_t		ri_mask;
+	vxin_t		ri_addr;
+	uint64_t	ri_flags;
+	uint64_t	ri_gen;
+} rte_t;
 
 typedef pair<uint64_t, vfe_t> fwdent;
 typedef map<uint64_t, vfe_t> ftable_t;
@@ -259,7 +269,7 @@ typedef struct vxlan_state {
 	vnitbl_t vs_vni_table;
 
 	/* default route */
-
+	rte_t vs_dflt_rte;
 } vxstate_t;
 
 
