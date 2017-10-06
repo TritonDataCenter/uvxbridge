@@ -271,6 +271,10 @@ typedef struct vxlan_state {
 
 	/* default route */
 	rte_t vs_dflt_rte;
+
+	/* transaction - no nesting */
+	int in_txn;
+	enum verb_error txn_error;
 } vxstate_t;
 
 

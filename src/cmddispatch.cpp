@@ -718,14 +718,24 @@ barrier_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string
 static int
 begin_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
-	result = UNIMPLEMENTED(seqno);
+	D("update forwarding state at %lu\n");
+	state.in_txn = 1;
+	state.txn_error = ERR_SUCCESS;
+	result = dflt_result(seqno, ERR_SUCCESS);
 	return 0;
 }
 
 static int
 commit_update_handler(cmdmap_t &map __unused, uint64_t seqno, vxstate_t &state, string &result)
 {
-	result = UNIMPLEMENTED(seqno);
+	if (state.in_txn == 0) {
+		result = dflt_result(seqno, ERR_INCOMPLETE);
+		return EINVAL;
+	}
+	result = dflt_result(seqno, state.txn_error);
+	state.in_txn = 0;
+	/* update forwarding path state - only on success? */
+	D("update forwarding state at %lu\n", seqno);
 	return 0;
 }
 
