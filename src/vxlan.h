@@ -65,9 +65,70 @@
  *
  */
  
+struct vxlanhdr {
+    uint32_t reserved0:4;
+    uint32_t v_i:1;
+    uint32_t reserved1:3;
+    uint32_t reserved2:24;
+    uint32_t v_vxlanid:24;
+    uint32_t reserved3:8;
+} __packed;
+
+/*
+ * IPv4 w/o VLAN
+ */
 struct vxlan_header {
-	uint64_t vh_odhost:48;
-	uint64_t vh_oshost:48;
-	uint16_t vh_etype;
-};
+    /* outer ether header */
+    struct ether_header vh_ehdr;
+    /* outer IP header */
+    struct ip vh_iphdr;
+	/* outer UDP header */
+    struct udphdr vh_udphdr;
+    /* outer vxlan id header */
+    struct vxlanhdr vh_vxlanhdr;
+} __packed;
+
+/*
+ * IPv4 w/ VLAN
+ */
+struct vxlan_vlan_header {
+    /* outer ether header */
+    struct ether_vlan_header vh_evhdr;
+    /* outer IP header */
+    struct ip vh_iphdr;
+	/* outer UDP header */
+    struct udphdr vh_udphdr;
+    /* outer vxlan id header */
+    struct vxlanhdr vh_vxlanhdr;
+} __packed;
+
+/*
+ * IPv6 w/o VLAN
+ */
+struct vxlan_header6 {
+    /* outer ether header */
+    struct ether_header vh_ehdr;
+    /* outer IP header */
+    struct ip6 vh_ip6hdr;
+	/* outer UDP header */
+    struct udphdr vh_udphdr;
+    /* outer vxlan id header */
+    struct vxlanhdr vh_vxlanhdr;
+} __packed;
+
+/*
+ * IPv6 w/ VLAN
+ */
+struct vxlan_vlan_header6 {
+    /* outer ether vlan header */
+    struct ether_vlan_header vh_evhdr;
+    /* outer IP header */
+    struct ip6 vh_ip6hdr;
+	/* outer UDP header */
+    struct udphdr vh_udphdr;
+    /* outer vxlan id header */
+    struct vxlanhdr vh_vxlanhdr;
+} __packed;
+
+
 
