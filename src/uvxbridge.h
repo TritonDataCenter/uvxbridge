@@ -249,7 +249,8 @@ typedef struct routeinfo {
 	vxin_t		ri_mask;
 	vxin_t		ri_addr;
 	uint64_t	ri_flags;
-	uint64_t	ri_gen;
+	uint32_t	ri_gen;
+	uint32_t	ri_prefixlen;
 } rte_t;
 
 typedef pair<uint64_t, vfe_t> fwdent;

@@ -297,15 +297,10 @@ static void
 vfe_to_rmap(vfe_t &fe, result_map &rmap)
 {
 	char buf[INET6_ADDRSTRLEN];
-	struct in_addr in4;
-	struct in6_addr in6;
+	int domain;
 
-	if (fe.vfe_v6) {
-		inet_ntop(AF_INET6, &in6, buf,  INET6_ADDRSTRLEN);
-	} else {
-		in4.s_addr = fe.vfe_raddr.in4.s_addr;
-		inet_ntop(AF_INET, &in4, buf,  INET6_ADDRSTRLEN);
-	}
+	domain = fe.vfe_v6 ? AF_INET6 : AF_INET;
+	inet_ntop(domain, &fe.vfe_raddr, buf,  INET6_ADDRSTRLEN);
 	rmap.insert("raddr", buf);
 	rmap.insert("gen", fe.vfe_gen);
 	rmap.insert("expire", fe.vfe_expire);
@@ -658,9 +653,11 @@ route_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &re
 	/* XXX check routing table */
 
 	/*************************/
-	if (v6 && (memcmp(&ent.ri_addr.in6, &dfltrte.ri_addr.in6, 16) == 0)) {
+	if (v6 && (ent.ri_flags & RI_IPV6) &&
+		(memcmp(&ent.ri_addr.in6, &dfltrte.ri_addr.in6, 16) == 0)) {
 		found = true;
-	} else if (!v6 && (ent.ri_addr.in4.s_addr == dfltrte.ri_addr.in4.s_addr)) {
+	} else if (!v6 && !(ent.ri_flags & RI_IPV6) &&
+			   (ent.ri_addr.in4.s_addr == dfltrte.ri_addr.in4.s_addr)) {
 		found = true;
 	}
 	if (found)
@@ -679,7 +676,21 @@ route_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &re
 static int
 route_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
-	result = UNIMPLEMENTED(seqno);
+	auto &dfltrte = state.vs_dflt_rte;
+	struct result_map rmap;
+	char buf[INET6_ADDRSTRLEN];
+	int domain;
+
+	result = dflt_result(seqno, ERR_SUCCESS);
+	if ((dfltrte.ri_flags & RI_VALID) == 0)
+		return 0;
+	domain = (dfltrte.ri_flags & RI_IPV6) ? AF_INET6 : AF_INET;
+	inet_ntop(domain, &dfltrte.ri_addr, buf, INET6_ADDRSTRLEN);
+	rmap.insert("raddr", buf);
+	rmap.insert("prefixlen", dfltrte.ri_prefixlen);
+	strcpy(buf, "true");
+	rmap.insert("default", buf);
+	result = gen_result(seqno, ERR_SUCCESS, rmap.to_str());
 	return 0;
 }
 
