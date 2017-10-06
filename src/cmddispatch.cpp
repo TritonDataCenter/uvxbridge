@@ -641,8 +641,39 @@ route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &re
 static int
 route_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
-	result = UNIMPLEMENTED(seqno);
+	char *ip;
+	bool v6, found = false;
+	int domain;
+	rte_t ent;
+
+	auto &dfltrte = state.vs_dflt_rte;
+	if (cmdmap_get_str(map, "raddr", &ip))
+		goto incomplete;
+
+	bzero(&ent.ri_addr, sizeof(vxin_t));
+	v6 = (index(ip, ':') != NULL);
+	domain = v6 ? AF_INET6 : AF_INET;
+	if (inet_pton(domain, ip, &ent.ri_addr))
+		goto badparse;
+	/* XXX check routing table */
+
+	/*************************/
+	if (v6 && (memcmp(&ent.ri_addr.in6, &dfltrte.ri_addr.in6, 16) == 0)) {
+		found = true;
+	} else if (!v6 && (ent.ri_addr.in4.s_addr == dfltrte.ri_addr.in4.s_addr)) {
+		found = true;
+	}
+	if (found)
+		bzero(&dfltrte, sizeof(rte_t));
+
+	result = dflt_result(seqno, ERR_SUCCESS);
 	return 0;
+  badparse:
+	result = dflt_result(seqno, ERR_PARSE);
+	return EINVAL;
+  incomplete:
+	result = dflt_result(seqno, ERR_INCOMPLETE);
+	return EINVAL;
 }
 
 static int
