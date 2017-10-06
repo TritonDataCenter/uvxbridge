@@ -44,6 +44,11 @@ static int verbose = 0;
 static int do_abort = 0;
 //static int zerocopy = 1; /* enable zerocopy if possible */
 
+enum direction {
+	EGRESS,
+	INGRESS
+};
+
 static void
 sigint_h(int sig)
 {
@@ -72,10 +77,29 @@ pkt_queued(struct nm_desc *d, int tx)
 	return tot;
 }
 
-static void
+static bool
+nd_request(char *rxbuf, int len, vxstate_t &state __unused)
+{
+	return false;
+}
+static bool
+nd_response(char *txbuf, uint16_t *len, vxstate_t &state __unused)
+{
+	return false;
+}
+
+static int
 vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 {
 	nm_pkt_copy(rxbuf, txbuf, len);
+	return 0;
+}
+
+static int
+vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
+{
+	nm_pkt_copy(rxbuf, txbuf, len);
+	return 0;
 }
 
 /*
@@ -83,9 +107,9 @@ vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
  */
 static int
 process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
-			  u_int limit, const char *msg, vxstate_t &state)
+			  u_int limit, const char *msg, vxstate_t &state, enum direction dir)
 {
-	u_int j, k, m = 0;
+	u_int incr, j, k, m = 0;
 
 	/* print a warning if any of the ring flags is set (e.g. NM_REINIT) */
 	if (rxring->flags || txring->flags)
@@ -100,6 +124,18 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 	if (m < limit)
 		limit = m;
 	m = limit;
+	if (dir == INGRESS) {
+		/* dump the responses to any neighbor discovery requests */
+		while (limit-- > 0) {
+			struct netmap_slot *ts = &txring->slot[k];
+			char *txbuf;
+
+			txbuf = NETMAP_BUF(txring, ts->buf_idx);
+			if (!nd_response(txbuf, &ts->len, state))
+				break;
+			k = nm_ring_next(txring, k);
+		}
+	}
 	while (limit-- > 0) {
 		struct netmap_slot *rs = &rxring->slot[j];
 		struct netmap_slot *ts = &txring->slot[k];
@@ -139,10 +175,18 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 		 */
 		rxbuf = NETMAP_BUF(rxring, rs->buf_idx);
 		txbuf = NETMAP_BUF(txring, ts->buf_idx);
-		vxlan_encap(rxbuf, txbuf, ts->len, state);
-		
+		if (dir == EGRESS) {
+			if (nd_request(rxbuf, ts->len, state)) {
+				incr = 0;
+			} else {
+				incr = vxlan_encap(rxbuf, txbuf, ts->len, state);
+			}
+		} else {
+			incr = vxlan_decap(rxbuf, txbuf, ts->len, state);
+		}
+		if (incr)
+			k = nm_ring_next(txring, k);
 		j = nm_ring_next(rxring, j);
-		k = nm_ring_next(txring, k);
 	}
 	rxring->head = rxring->cur = j;
 	txring->head = txring->cur = k;
@@ -154,7 +198,8 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 
 /* move packts from src to destination */
 static int
-move(struct nm_desc *src, struct nm_desc *dst, u_int limit, vxstate_t &state)
+move(struct nm_desc *src, struct nm_desc *dst, u_int limit, vxstate_t &state,
+	 enum direction dir)
 {
 	struct netmap_ring *txring, *rxring;
 	u_int m = 0, si = src->first_rx_ring, di = dst->first_tx_ring;
@@ -173,7 +218,7 @@ move(struct nm_desc *src, struct nm_desc *dst, u_int limit, vxstate_t &state)
 			di++;
 			continue;
 		}
-		m += process_rings(rxring, txring, limit, msg, state);
+		m += process_rings(rxring, txring, limit, msg, state, dir);
 	}
 
 	return (m);
@@ -185,6 +230,7 @@ run_datapath(vxstate_t &state)
 	struct pollfd pollfd[2];
 //	int ch;
 	u_int burst = 1024, wait_link = 4;
+	// pa = host; pb = egress 
 	struct nm_desc *pa = NULL, *pb = NULL;
 //	char *ifa = NULL, *ifb = NULL;
 
@@ -252,10 +298,10 @@ run_datapath(vxstate_t &state)
 				rx->head, rx->cur, rx->tail);
 		}
 		if (pollfd[0].revents & POLLOUT)
-			move(pb, pa, burst, state);
+			move(pb, pa, burst, state, INGRESS);
 
 		if (pollfd[1].revents & POLLOUT)
-			move(pa, pb, burst, state);
+			move(pa, pb, burst, state, EGRESS);
 
 		/* We don't need ioctl(NIOCTXSYNC) on the two file descriptors here,
 		 * kernel will txsync on next poll(). */
