@@ -33,16 +33,64 @@
 
 #include "uvxbridge.h"
 #include "uvxlan.h"
+                                /*   hrd         pro     hln  pln     op   */
+static uint8_t arpopreq_[8] =    {0x00, 0x01, 0x08, 0x00, 0x6, 0x4, 0x0, 0x1};
+static uint64_t arpopreq = (uint64_t)arpopreq_;
+static uint8_t arpopreply_[8] =  {0x00, 0x01, 0x08, 0x00, 0x6, 0x4, 0x0, 0x2};
+static uint64_t arpopreply = (uint64_t)arpopreply_;
+
+static char *
+vx_txbuf_alloc(vxstate_t &state)
+{
+	return NULL;
+}
 
 /*
- * If rxbuf contains a neighbor discovery request, save a
- * response and return true
+ * If rxbuf contains a neighbor discovery request return true.
+ * If it's an nd request we can handle, enqueue a response.
+ *
  * dir = EGRESS => VX, dir = INGRESS => PHYS
  */
 bool
-nd_request(char *rxbuf, uint16_t len, vxstate_t &state __unused, tundir_t dir)
+nd_request(char *rxbuf, uint16_t len, vxstate_t &state, tundir_t dir)
 {
-	return false;
+	struct ether_vlan_header *evh, *evhrsp;
+	char *txbuf;
+	l2tbl_t *tbl;
+	struct arphdr_ether *ae;
+	int etype, hdrlen;
+
+	evh = (struct ether_vlan_header *)(rxbuf);
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
+		hdrlen = ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN;
+		etype = ntohs(evh->evl_proto);
+	} else {
+		hdrlen = ETHER_HDR_LEN;
+		etype = ntohs(evh->evl_encap_proto);
+	}
+
+	/* XXX we only handle ipv4 here for v0 */
+	if (etype != ETHERTYPE_ARP)
+		return false;
+
+	ae = (struct arphdr_ether *)(rxbuf + hdrlen);
+	if (dir == EGRESS)
+		tbl = &state.vs_l2_vx;
+	else
+		tbl = &state.vs_l2_phys;
+
+//  XXX we assume prepopulated ARP table so ignore replies
+//	if (ae->ae_req != arpopreq && ae->ae_req != arpopreply)
+	if (ae->ae_req != arpopreq)
+		return true;
+	if ((txbuf = vx_txbuf_alloc(state)) == NULL)
+		return true;
+	evhrsp = (struct ether_vlan_header *)(txbuf);
+	memcpy(evhrsp, evh, hdrlen);
+	ae = (struct arphdr_ether *)(txbuf + hdrlen);
+	ae->ae_req = arpopreply;
+
+	return true;
 }
 
 /*

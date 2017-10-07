@@ -96,17 +96,15 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 	if (m < limit)
 		limit = m;
 	m = limit;
-	if (dir == INGRESS) {
-		/* dump the responses to any neighbor discovery requests */
-		while (limit-- > 0) {
-			struct netmap_slot *ts = &txring->slot[k];
-			char *txbuf;
+	/* dump the responses to any neighbor discovery requests */
+	while (limit-- > 0) {
+		struct netmap_slot *ts = &txring->slot[k];
+		char *txbuf;
 
-			txbuf = NETMAP_BUF(txring, ts->buf_idx);
-			if (!nd_response(txbuf, &ts->len, state, dir))
-				break;
-			k = nm_ring_next(txring, k);
-		}
+		txbuf = NETMAP_BUF(txring, ts->buf_idx);
+		if (!nd_response(txbuf, &ts->len, state, dir))
+			break;
+		k = nm_ring_next(txring, k);
 	}
 	while (limit-- > 0) {
 		struct netmap_slot *rs = &rxring->slot[j];
@@ -161,7 +159,7 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 	return (m);
 }
 
-/* move packts from src to destination */
+/* move packets from src to destination */
 static int
 move(struct nm_desc *src, struct nm_desc *dst, u_int limit, vxstate_t &state,
 	 tundir_t dir)
