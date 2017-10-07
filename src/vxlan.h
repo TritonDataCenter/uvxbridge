@@ -1,3 +1,5 @@
+#ifndef UVX_VXLAN_H_
+#define UVX_VXLAN_H_
 /*
  *   0                   1                   2                   3
  *   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -130,6 +132,14 @@ struct vxlan_vlan_header6 {
     struct vxlanhdr vh_vxlanhdr;
 } __packed;
 
+typedef enum tundir {
+	EGRESS,
+	INGRESS
+} tundir_t;
 
-int vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state);
-int vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state);
+int vxlan_tun(char *rxbuf, char *txbuf, int len, vxstate_t &state, tundir_t dir);
+bool nd_request(char *rxbuf, int len, vxstate_t &state __unused, tundir_t dir);
+bool nd_response(char *txbuf, int len, vxstate_t &state __unused, tundir_t dir);
+
+
+#endif
