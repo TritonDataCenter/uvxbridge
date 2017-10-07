@@ -99,6 +99,7 @@
  *
  *
  * - UPDATE_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
+ *                        laddr: <4-tuple| v6addr w/ no symbolic>
  *                    prefixlen: 2 byte value
  *                      [default:<true|false>]?
  *       ((result <seqno>) (error <errstr>) ((gen 4 bytes))?)
@@ -109,6 +110,7 @@
  * - GET_ALL_ROUTE:<seqno>
  *       ((result <seqno>) (error <errstr>)
  *               ((raddr <4-tuple| v6addr w/ no symbolic>)
+ *                (laddr <4-tuple| v6addr w/ no symbolic>)
  *                (prefixlen 2 byte value)
  *                (default <true|false>))*)
  *
@@ -138,7 +140,7 @@
  *
  * Sample syntax - with the command shown in C syntax to indicate literal quotes
  *                 and newlines:
- * client -> server: "VERB_UPDATE_ROUTE:0x1 raddr:\"192.168.0.1\" default:\"true\" subnet:\"192.168.0.0\" prefixlen:0x10\n"
+ * client -> server: "VERB_UPDATE_ROUTE:0x1 raddr:\"192.168.0.1\" laddr:\"192.168.1.20\" default:\"true\" prefixlen:0x10\n"
  * server -> client: "((result 0x1) (error \"ERR_SUCCESS\") ((gen 0x0)))\n"
  * client -> server: "VERB_SET_PHYS_ND:0x2 raddr:\"192.168.0.1\" mac:0xbabecafebeef\n"
  * server -> client: "((result 0x2) (error \"ERR_SUCCESS\"))"
@@ -251,7 +253,8 @@ typedef struct vxlan_ftable_entry {
 
 typedef struct routeinfo {
 	vxin_t		ri_mask;
-	vxin_t		ri_addr;
+	vxin_t		ri_raddr;
+	vxin_t		ri_laddr;
 	uint64_t	ri_flags;
 	uint32_t	ri_gen;
 	uint32_t	ri_prefixlen;

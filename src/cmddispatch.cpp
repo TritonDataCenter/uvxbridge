@@ -577,13 +577,15 @@ genmask(int prefixlen)
 static int
 route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
-	char *ip, *def;
+	char *raddr, *laddr, *def;
 	uint64_t prefixlen;
-	bool v6, is_default = false;
+	bool v6, lv6, is_default = false;
 	int domain;
 	rte_t ent;
 
-	if (cmdmap_get_str(map, "raddr", &ip))
+	if (cmdmap_get_str(map, "raddr", &raddr))
+		goto incomplete;
+	if (cmdmap_get_str(map, "laddr", &laddr))
 		goto incomplete;
 	if (cmdmap_get_num(map, "prefixlen", prefixlen))
 		goto incomplete;
@@ -591,12 +593,15 @@ route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &re
 		is_default = (strcmp(def, "true") == 0);
 
 	bzero(&ent, sizeof(rte_t));
-	v6 = (index(ip, ':') != NULL);
+	v6 = (index(raddr, ':') != NULL);
+	lv6 = (index(laddr, ':') != NULL);
 	domain = v6 ? AF_INET6 : AF_INET;
 	ent.ri_flags = RI_VALID;
-	if ((v6 && prefixlen > 128) || (!v6 && prefixlen > 32))
+	if ((lv6 != v6) || (v6 && prefixlen > 128) || (!v6 && prefixlen > 32))
 		goto badparse;
-	if (inet_pton(domain, ip, &ent.ri_addr))
+	if (inet_pton(domain, raddr, &ent.ri_raddr))
+		goto badparse;
+	if (inet_pton(domain, laddr, &ent.ri_laddr))
 		goto badparse;
 
 	if (v6) {
@@ -645,19 +650,19 @@ route_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &re
 	if (cmdmap_get_str(map, "raddr", &ip))
 		goto incomplete;
 
-	bzero(&ent.ri_addr, sizeof(vxin_t));
+	bzero(&ent.ri_raddr, sizeof(vxin_t));
 	v6 = (index(ip, ':') != NULL);
 	domain = v6 ? AF_INET6 : AF_INET;
-	if (inet_pton(domain, ip, &ent.ri_addr))
+	if (inet_pton(domain, ip, &ent.ri_raddr))
 		goto badparse;
 	/* XXX check routing table */
 
 	/*************************/
 	if (v6 && (ent.ri_flags & RI_IPV6) &&
-		(memcmp(&ent.ri_addr.in6, &dfltrte.ri_addr.in6, 16) == 0)) {
+		(memcmp(&ent.ri_raddr.in6, &dfltrte.ri_raddr.in6, 16) == 0)) {
 		found = true;
 	} else if (!v6 && !(ent.ri_flags & RI_IPV6) &&
-			   (ent.ri_addr.in4.s_addr == dfltrte.ri_addr.in4.s_addr)) {
+			   (ent.ri_raddr.in4.s_addr == dfltrte.ri_raddr.in4.s_addr)) {
 		found = true;
 	}
 	if (found)
@@ -685,8 +690,10 @@ route_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &r
 	if ((dfltrte.ri_flags & RI_VALID) == 0)
 		return 0;
 	domain = (dfltrte.ri_flags & RI_IPV6) ? AF_INET6 : AF_INET;
-	inet_ntop(domain, &dfltrte.ri_addr, buf, INET6_ADDRSTRLEN);
+	inet_ntop(domain, &dfltrte.ri_raddr, buf, INET6_ADDRSTRLEN);
 	rmap.insert("raddr", buf);
+	inet_ntop(domain, &dfltrte.ri_laddr, buf, INET6_ADDRSTRLEN);
+	rmap.insert("laddr", buf);
 	rmap.insert("prefixlen", dfltrte.ri_prefixlen);
 	strcpy(buf, "true");
 	rmap.insert("default", buf);
