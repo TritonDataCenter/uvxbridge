@@ -88,7 +88,7 @@ pkt_queued(struct nm_desc *d, int tx)
  *
  */
 static bool
-nd_request(char *rxbuf, int len, vxstate_t &state __unused)
+nd_request(char *rxbuf, int len, vxstate_t &state __unused, enum arptype type)
 {
 	return false;
 }
@@ -99,7 +99,7 @@ nd_request(char *rxbuf, int len, vxstate_t &state __unused)
  *
  */
 static bool
-nd_response(char *txbuf, uint16_t *len, vxstate_t &state __unused)
+nd_response(char *txbuf, uint16_t *len, vxstate_t &state __unused, enum arptype type)
 {
 	return false;
 }
