@@ -1,5 +1,10 @@
 #ifndef UVX_VXLAN_H_
 #define UVX_VXLAN_H_
+#include <net/ethernet.h>
+#include <netinet/ip.h>
+#include <netinet/ip6.h>
+#include <netinet/udp.h>
+
 /*
  *   0                   1                   2                   3
  *   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -111,7 +116,7 @@ struct vxlan_header6 {
     /* outer ether header */
     struct ether_header vh_ehdr;
     /* outer IP header */
-    struct ip6 vh_ip6hdr;
+    struct ip6_hdr vh_ip6hdr;
 	/* outer UDP header */
     struct udphdr vh_udphdr;
     /* outer vxlan id header */
@@ -125,8 +130,8 @@ struct vxlan_vlan_header6 {
     /* outer ether vlan header */
     struct ether_vlan_header vh_evhdr;
     /* outer IP header */
-    struct ip6 vh_ip6hdr;
-	/* outer UDP header */
+    struct ip6_hdr vh_ip6hdr;
+    /* outer UDP header */
     struct udphdr vh_udphdr;
     /* outer vxlan id header */
     struct vxlanhdr vh_vxlanhdr;
@@ -138,8 +143,8 @@ typedef enum tundir {
 } tundir_t;
 
 int vxlan_tun(char *rxbuf, char *txbuf, int len, vxstate_t &state, tundir_t dir);
-bool nd_request(char *rxbuf, int len, vxstate_t &state __unused, tundir_t dir);
-bool nd_response(char *txbuf, int len, vxstate_t &state __unused, tundir_t dir);
+bool nd_request(char *rxbuf, uint16_t len, vxstate_t &state, tundir_t dir);
+bool nd_response(char *txbuf, uint16_t *len, vxstate_t &state, tundir_t dir);
 
 
 #endif
