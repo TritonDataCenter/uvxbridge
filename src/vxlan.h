@@ -131,4 +131,5 @@ struct vxlan_vlan_header6 {
 } __packed;
 
 
-
+int vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state);
+int vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state);
