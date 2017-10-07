@@ -20,7 +20,7 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS’’ AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
@@ -38,16 +38,12 @@
 #include <net/netmap_user.h>
 #include <sys/poll.h>
 
-#include "uvxbridge.h"
+#include “uvxbridge.h”
 static int verbose = 0;
 
 static int do_abort = 0;
 //static int zerocopy = 1; /* enable zerocopy if possible */
 
-struct vxlan_header {
-	uint64_t vh_dhost:48;
-	uint64_t vh_shost:48;
-};
 
 enum direction {
 	EGRESS,
@@ -127,7 +123,7 @@ vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 }
 
 /*
- * move up to 'limit' pkts from rxring to txring swapping buffers.
+ * move up to ‘limit’ pkts from rxring to txring swapping buffers.
  */
 static int
 process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
@@ -137,7 +133,7 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 
 	/* print a warning if any of the ring flags is set (e.g. NM_REINIT) */
 	if (rxring->flags || txring->flags)
-		D("%s rxflags %x txflags %x",
+		D(“%s rxflags %x txflags %x”,
 			msg, rxring->flags, txring->flags);
 	j = rxring->cur; /* RX */
 	k = txring->cur; /* TX */
@@ -150,7 +146,7 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 	m = limit;
 	if (dir == INGRESS) {
 		/* dump the responses to any neighbor discovery requests */
-		while (limit-- > 0) {
+		while (limit— > 0) {
 			struct netmap_slot *ts = &txring->slot[k];
 			char *txbuf;
 
@@ -160,23 +156,23 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 			k = nm_ring_next(txring, k);
 		}
 	}
-	while (limit-- > 0) {
+	while (limit— > 0) {
 		struct netmap_slot *rs = &rxring->slot[j];
 		struct netmap_slot *ts = &txring->slot[k];
 		char *rxbuf, *txbuf;
 
 		/* swap packets */
 		if (ts->buf_idx < 2 || rs->buf_idx < 2) {
-			D("wrong index rx[%d] = %d  -> tx[%d] = %d",
+			D(“wrong index rx[%d] = %d  -> tx[%d] = %d”,
 				j, rs->buf_idx, k, ts->buf_idx);
 			sleep(2);
 		}
 		/* copy the packet length. */
 		if (rs->len > 2048) {
-			D("wrong len %d rx[%d] -> tx[%d]", rs->len, j, k);
+			D(“wrong len %d rx[%d] -> tx[%d]”, rs->len, j, k);
 			rs->len = 0;
 		} else if (verbose > 1) {
-			D("%s send len %d rx[%d] -> tx[%d]", msg, rs->len, j, k);
+			D(“%s send len %d rx[%d] -> tx[%d]”, msg, rs->len, j, k);
 		}
 		ts->len = rs->len;
 #ifdef original
@@ -194,7 +190,7 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 		}
 #endif
 		/*
-		 * XXX we can't do zero copy until we update VALE
+		 * XXX we can’t do zero copy until we update VALE
 		 * to provide the requisite headroom
 		 */
 		rxbuf = NETMAP_BUF(rxring, rs->buf_idx);
@@ -215,7 +211,7 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 	rxring->head = rxring->cur = j;
 	txring->head = txring->cur = k;
 	if (verbose && m > 0)
-		D("%s sent %d packets to %p", msg, m, txring);
+		D(“%s sent %d packets to %p”, msg, m, txring);
 
 	return (m);
 }
@@ -228,12 +224,12 @@ move(struct nm_desc *src, struct nm_desc *dst, u_int limit, vxstate_t &state,
 	struct netmap_ring *txring, *rxring;
 	u_int m = 0, si = src->first_rx_ring, di = dst->first_tx_ring;
 	const char *msg = (src->req.nr_flags == NR_REG_SW) ?
-		"host->net" : "net->host";
+		“host->net” : “net->host”;
 
 	while (si <= src->last_rx_ring && di <= dst->last_tx_ring) {
 		rxring = NETMAP_RXRING(src->nifp, si);
 		txring = NETMAP_TXRING(dst->nifp, di);
-		ND("txring %p rxring %p", txring, rxring);
+		ND(“txring %p rxring %p”, txring, rxring);
 		if (nm_ring_empty(rxring)) {
 			si++;
 			continue;
@@ -295,9 +291,9 @@ run_datapath(vxstate_t &state)
 		ret = poll(pollfd, 2, 2500);
 #endif /* defined(_WIN32) || defined(BUSYWAIT) */
 		if (ret <= 0 || verbose)
-		    D("poll %s [0] ev %x %x rx %d@%d tx %d,"
-			     " [1] ev %x %x rx %d@%d tx %d",
-				ret <= 0 ? "timeout" : "ok",
+		    D(“poll %s [0] ev %x %x rx %d@%d tx %d,”
+			     “ [1] ev %x %x rx %d@%d tx %d”,
+				ret <= 0 ? “timeout” : “ok”,
 				pollfd[0].events,
 				pollfd[0].revents,
 				pkt_queued(pa, 0),
@@ -313,12 +309,12 @@ run_datapath(vxstate_t &state)
 			continue;
 		if (pollfd[0].revents & POLLERR) {
 			struct netmap_ring *rx = NETMAP_RXRING(pa->nifp, pa->cur_rx_ring);
-			D("error on fd0, rx [%d,%d,%d)",
+			D(“error on fd0, rx [%d,%d,%d)”,
 				rx->head, rx->cur, rx->tail);
 		}
 		if (pollfd[1].revents & POLLERR) {
 			struct netmap_ring *rx = NETMAP_RXRING(pb->nifp, pb->cur_rx_ring);
-			D("error on fd1, rx [%d,%d,%d)",
+			D(“error on fd1, rx [%d,%d,%d)”,
 				rx->head, rx->cur, rx->tail);
 		}
 		if (pollfd[0].revents & POLLOUT)
@@ -327,7 +323,7 @@ run_datapath(vxstate_t &state)
 		if (pollfd[1].revents & POLLOUT)
 			move(pa, pb, burst, state, EGRESS);
 
-		/* We don't need ioctl(NIOCTXSYNC) on the two file descriptors here,
+		/* We don’t need ioctl(NIOCTXSYNC) on the two file descriptors here,
 		 * kernel will txsync on next poll(). */
 	}	
 	return 0;
