@@ -46,6 +46,11 @@ static int verbose = 0;
 static int do_abort = 0;
 //static int zerocopy = 1; /* enable zerocopy if possible */
 
+typedef enum tundir {
+	EGRESS,
+	INGRESS
+} tundir_t;
+
 static void
 sigint_h(int sig)
 {
@@ -74,6 +79,85 @@ pkt_queued(struct nm_desc *d, int tx)
 	return tot;
 }
 
+static struct netmap_ring *
+vx_txring(vxstate_t &state, tundir_t dir)
+{
+	abort();
+	return NULL;
+}
+
+static void
+nd_dispatch(char *rxbuf, uint16_t len, vxstate_t &state, tundir_t dir)
+{
+	struct netmap_ring *txring;
+	struct ether_vlan_header *evh, *evhrsp;
+	struct arphdr_ether dae, *sae;
+	int hdrlen, etype;
+	bool hit;
+
+	txring = vx_txring(state, dir);
+	if (nm_ring_space(txring) == 0)
+		return;
+
+	evh = (struct ether_vlan_header *)(rxbuf);
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
+		hdrlen = ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN;
+		etype = ntohs(evh->evl_proto);
+	} else {
+		hdrlen = ETHER_HDR_LEN;
+		etype = ntohs(evh->evl_encap_proto);
+	}
+	/* bad packet size - XXX do we have 18 bytes of PAD? */
+	if (len != hdrlen + sizeof(struct arphdr_ether))
+		return;
+
+	sae = (struct arphdr_ether *)(rxbuf + hdrlen);
+	if (dir == EGRESS)
+		hit = nd_request(sae, &dae, state, state.vs_l2_vx);
+	else
+		hit = nd_request(sae, &dae, state, state.vs_l2_phys);
+	if (hit) {
+		int k = txring->cur;
+		struct netmap_slot *ts = &txring->slot[k];
+		char *txbuf = NETMAP_BUF(txring, ts->buf_idx);
+
+		/* advance ring */
+		txring->head = txring->cur = nm_ring_next(txring, k);
+		/* fill in response */
+		evhrsp = (struct ether_vlan_header *)(txbuf);
+		memcpy(&evhrsp->evl_dhost, &evh->evl_shost, ETHER_ADDR_LEN);
+		memcpy(&evhrsp->evl_shost, &evh->evl_dhost, ETHER_ADDR_LEN);
+		evhrsp->evl_encap_proto = etype;
+		if (hdrlen != ETHER_HDR_LEN) {
+			evhrsp->evl_tag = evh->evl_tag;
+			evhrsp->evl_proto = evh->evl_proto;
+		}
+		memcpy(txbuf + hdrlen, &dae, sizeof(struct arphdr_ether));
+	}
+}
+
+static bool
+pkt_dispatch(char *rxbuf, char *txbuf, uint16_t len, vxstate_t &state, tundir_t dir)
+{
+	struct ether_vlan_header *evh;
+	int etype;
+
+	evh = (struct ether_vlan_header *)(rxbuf);
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN))
+		etype = ntohs(evh->evl_proto);
+   else
+		etype = ntohs(evh->evl_encap_proto);
+
+	/* XXX we only handle ipv4 here for v0 */
+	if (__predict_false(etype == ETHERTYPE_ARP)) {
+		nd_dispatch(rxbuf, len, state, dir);
+		return false;
+	} else if (dir == INGRESS)
+		return vxlan_decap(rxbuf, txbuf, len, state);
+	else
+		return vxlan_encap(rxbuf, txbuf, len, state);
+}
+
 /*
  * move up to _limit_ pkts from rxring to txring swapping buffers.
  */
@@ -96,16 +180,6 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 	if (m < limit)
 		limit = m;
 	m = limit;
-	/* dump the responses to any neighbor discovery requests */
-	while (limit-- > 0) {
-		struct netmap_slot *ts = &txring->slot[k];
-		char *txbuf;
-
-		txbuf = NETMAP_BUF(txring, ts->buf_idx);
-		if (!nd_response(txbuf, &ts->len, state, dir))
-			break;
-		k = nm_ring_next(txring, k);
-	}
 	while (limit-- > 0) {
 		struct netmap_slot *rs = &rxring->slot[j];
 		struct netmap_slot *ts = &txring->slot[k];
@@ -146,9 +220,8 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 		rxbuf = NETMAP_BUF(rxring, rs->buf_idx);
 		txbuf = NETMAP_BUF(txring, ts->buf_idx);
 		j = nm_ring_next(rxring, j);
-		if (nd_request(rxbuf, ts->len, state, dir))
-			continue;
-		else if (vxlan_tun(rxbuf, txbuf, ts->len, state, dir))
+		/* we only need to advance the txring idx if txbuf is consumed */
+		if (pkt_dispatch(rxbuf, txbuf, ts->len, state, dir))
 			k = nm_ring_next(txring, k);
 	}
 	rxring->head = rxring->cur = j;

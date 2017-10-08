@@ -165,12 +165,8 @@ struct vxlan_vlan_header6 {
     struct vxlanhdr vh_vxlanhdr;
 } __packed;
 
-typedef enum tundir {
-	EGRESS,
-	INGRESS
-} tundir_t;
-
-int vxlan_tun(char *rxbuf, char *txbuf, int len, vxstate_t &state, tundir_t dir);
+bool vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state);
+bool vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state);
 
 /*
  * Address Resolution Protocol.
@@ -225,8 +221,6 @@ struct arphdr_ether {
 	uint32_t ae_dpa;
 } __packed;
 
-bool nd_request(char *rxbuf, uint16_t len, vxstate_t &state, tundir_t dir);
-bool nd_response(char *txbuf, uint16_t *len, vxstate_t &state, tundir_t dir);
-
+bool nd_request(struct arphdr_ether *sae, struct arphdr_ether *dae, vxstate_t &state, l2tbl_t &tbl);
 
 #endif
