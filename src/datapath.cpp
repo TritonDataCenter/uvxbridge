@@ -96,7 +96,7 @@ nd_dispatch(char *rxbuf, uint16_t len, vxstate_t &state, tundir_t dir)
 	bool hit;
 
 	txring = vx_txring(state, dir);
-	if (nm_ring_space(txring) == 0)
+	if (__predict_false(nm_ring_space(txring) == 0))
 		return;
 
 	evh = (struct ether_vlan_header *)(rxbuf);
@@ -108,7 +108,7 @@ nd_dispatch(char *rxbuf, uint16_t len, vxstate_t &state, tundir_t dir)
 		etype = ntohs(evh->evl_encap_proto);
 	}
 	/* bad packet size - XXX do we have 18 bytes of PAD? */
-	if (len != hdrlen + sizeof(struct arphdr_ether))
+	if (__predict_false(len != hdrlen + sizeof(struct arphdr_ether)))
 		return;
 
 	sae = (struct arphdr_ether *)(rxbuf + hdrlen);
