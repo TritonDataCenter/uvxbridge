@@ -36,77 +36,91 @@
 
 /*  
  * VERB command set
- * 
+ *
+ *   update VM MAC -> vlanid|vxlanid mapping
+ * - UPDATE_VM_VNI:<seqno> mac: 6-bytes vlanid: 2-bytes vxlanid: 3-bytes 
+ *     ((result <seqno>) (error <errorstr>) ((gen 4 byte)))
+ *
+ *   get VM MAC -> vlanid|vxlanid mapping
+ * - GET_VM_VNI:<seqno> mac: 6-bytes
+ *       ((result <seqno>) (error <errorstr>) ((vlanid 2-bytes)
+ *              (vxlanid 3-bytes)
+ *                  (gen 4 byte)))
+ *
+ *   remove VM MAC -> vlanid|vxlanid mapping
+ * - REMOVE_VM_VNI:<seqno> mac: big-endian 6 bytes
+ *       ((result <seqno>) (error <errorstr>))
+ *
+ *   get all VM MAC -> vlanid|vxlanid mappings
+ * - GET_ALL_VM_VNI:<seqno>
+ *       ((result <seqno>) (error <errstr>)  ((mac 6 bytes)
+ *              (vlanid 2-bytes)
+ *              (vxlanid 3-bytes)
+ *                  (gen 4 byte))*)
+ *
+ *
  *   Add per-VNI forwarding table entry map destination host mac to remote ip
+ *
+ *   Update destination MAC | VXLAN id -> remote ip address (mandatory for v0 only)
  * - UPDATE_FTE:<seqno> mac: 6 bytes
  *                vxlanid: 3 byte value
- *                vlanid: 2 byte value
- *                raddr: <4-tuple| v6addr w/ no symbolic>
- *             expire: 8 bytes - useconds
+ *                  raddr: <4-tuple| v6addr w/ no symbolic>
+ *                 expire: 8 bytes - useconds
  *         ((result seqno) (error <errstr>) ((gen 4 byte))?)
  *
- *  Get forwarding entry details
+ *   Get destination MAC | VXLAN id  -> remote ip address
  * - GET_FTE:<seqno> mac: 6 bytes
  *               vxlanid: 3 byte value
- *                 vlanid: 2 byte value
  *       ((result <seqno>) (error <errstr>) ((raddr <4-tuple| v6addr w/ no symbolic>)
  *              (expire 8 bytes) # useconds
  *                 (gen 4 byte))?)
  * 
+ *   Remove destination MAC | VXLAN id from table
  * - REMOVE_FTE:<seqno> mac: 6 bytes
  *                  vxlanid: 3 byte value
  *       ((result <seqno>) (error <errstr>))
  *
+ *   Get all forwarding table entries
  * - GET_ALL_FTE:<seqno>
- *         (result: error:<errstr>
+ *         ((result <seqno>) (error <errstr>)
  *                  ((mac 6 bytes)
- *               (vxlanid 3 byte value)
- *                (vlanid 2 byte value)
- *                 (raddr <4-tuple| v6addr w/ no symbolic>)
- *                (expire 8 bytes) # useconds
+ *                  (vxlanid 3 byte value)
+ *                  (raddr <4-tuple| v6addr w/ no symbolic>)
+ *                  (expire 8 bytes) # useconds
  *                   (gen 4 bytes))*)
  *
  *
- *   manage physical L2 table entries for remote IP
+ *   Manage physical L2 table entries for remote IP
+ *   Install a IP -> MAC mapping (necessary for v0 only)
  * - SET_PHYS_ND:<seqno> mac: big-endian 6 bytes raddr: <4-tuple| v6addr w/ no symbolic>
  *   ((result <seqno>) (error <errstr>))
  *
+ *   Delete a IP -> MAC mapping
  * - DEL_PHYS_ND:<seqno> mac: big-endian 6 bytes | raddr: <4-tuple| v6addr w/ no symbolic>
  *   ((result <seqno>) (error <errstr>))
  *
+ *   Get a IP -> MAC mapping
  * - GET_PHYS_ND:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
  *      ((result <seqno>)  (error <errstr>) ((mac big-endian 6 bytes))?)
  *
+ *   Get all IP -> MAC mappings
  * - GET_ALL_PHYS_ND:<seqno>
  *       ((result <seqno>) (error <errstr>) ((mac big-endian 6 bytes)
  *               (raddr <4-tuple| v6addr w/ no symbolic>))*)
  *
  *
- *   manage vxlan L2 table entries for remote IP
- * - SET_VX_ND:<seqno> mac: big-endian 6 bytes raddr: <4-tuple| v6addr w/ no symbolic>
- *   ((result <seqno>) (error <errstr>))
- *
- * - DEL_VX_ND:<seqno> mac: big-endian 6 bytes |
- *             raddr: <4-tuple| v6addr w/ no symbolic>
- *   ((result <seqno>) (error <errstr>))
- *
- * - GET_VX_ND:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
- *      ((result <seqno>) (error <errstr>) ((mac 6 bytes))?)
- *
- * - GET_ALL_VX_ND:<seqno>
- *       ((result <seqno>) (error <errstr>) ((mac 6 bytes)
- *               (raddr <4-tuple| v6addr w/ no symbolic>))*)
- *
- *
+ *   Add router address for local address with prefixlen netmask - default or not
  * - UPDATE_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
  *                        laddr: <4-tuple| v6addr w/ no symbolic>
  *                    prefixlen: 2 byte value
  *                      [default:<true|false>]?
  *       ((result <seqno>) (error <errstr>) ((gen 4 bytes))?)
  *
+ *   Remove router address
  * - REMOVE_ROUTE:<seqno> raddr: <4-tuple| v6addr w/ no symbolic>
  *       ((result <seqno>) (error <errstr>))
  *
+ *   Get all routes address
  * - GET_ALL_ROUTE:<seqno>
  *       ((result <seqno>) (error <errstr>)
  *               ((raddr <4-tuple| v6addr w/ no symbolic>)
