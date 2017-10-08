@@ -66,6 +66,7 @@ nd_request(struct arphdr_ether *sae, arphdr_ether *dae, vxstate_t &state, l2tbl_
 bool
 vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 {
+
 	nm_pkt_copy(rxbuf, txbuf, len);
 	return true;
 }
@@ -77,6 +78,33 @@ vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 bool
 vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 {
+	struct ether_vlan_header *evh, *evhrsp;
+	int hdrlen, etype;
+
+	evh = (struct ether_vlan_header *)(rxbuf);
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
+		hdrlen = ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN;
+		etype = ntohs(evh->evl_proto);
+	} else {
+		hdrlen = ETHER_HDR_LEN;
+		etype = ntohs(evh->evl_encap_proto);
+	}
+	if (etype != ETHERTYPE_IP && etype != ETHERYTPE_IPV6)
+		return false;
+	/* first map evh->evl_shost -> vxlanid / vlanid */
+	/* ..... */
+	/* next map evh->evl_dhost -> remote ip addr in the corresponding forwarding table */
+	/* ..... */
+	/* next check if remote ip is on our local subnet */
+	/* .... */
+	/* if yes - lookup MAC address for peer */
+	/* .... */
+	/* if no - lookup MAC address for corresponding router */
+	/* .... */
+	/* use source IP for said subnet */
+	/* calculate source port */
+	/* .... */
+
     nm_pkt_copy(rxbuf, txbuf, len);
     return true;
 }
