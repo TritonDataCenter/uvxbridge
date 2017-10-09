@@ -46,7 +46,7 @@
 static void
 usage(char *name)
 {
-	printf("usage %s -i <ingress> -e <egress> -c <config> -m <config mac address> -p <provisioning agent mac address>", name);
+	printf("usage %s -i <ingress> -e <egress> -c <config> -m <config mac address> -p <provisioning agent mac address> [-d]\n", name);
 	exit(1);
 }
 
@@ -56,18 +56,14 @@ mac_parse(char *input)
 	char *idx, *mac = strdup(input);
 	const char *del = ":";
 	uint8_t mac_num[8];
-	uint64_t result;
 	int i;
 
-	for (i = 0; ((idx = strsep(&mac, del)) != NULL) && i < ETHER_ADDR_LEN; i++) {
-		mac_num[i] = strtol(idx, NULL, 10);
-	}
+	for (i = 0; ((idx = strsep(&mac, del)) != NULL) && i < ETHER_ADDR_LEN; i++)
+		mac_num[i] = strtol(idx, NULL, 16);
 	free(mac);
 	if (i < ETHER_ADDR_LEN)
 		return 0;
-	result = *(uint64_t *)mac_num;
-
-	return htobe64(result);
+	return  *(uint64_t *)&mac_num;
 }
 
 
@@ -78,26 +74,28 @@ netmap_setup(vxstate_t &state, char *ingress, char *egress, char *config)
 
 	ni = ne = nc = NULL;
 
-	ni = nm_open(ingress, NULL, 0, NULL);
-	if (ni == NULL) {
-		D("cannot open %s", ingress);
-		return (1);
-	}
-	ne = nm_open(egress, NULL, NM_OPEN_NO_MMAP, ni);
-	if (ne == NULL) {
-		D("cannot open %s", egress);
-		return (1);
-	}
-	nc = nm_open(config, NULL, NM_OPEN_NO_MMAP, ni);
+	nc = nm_open(config, NULL, 0, NULL);
 	if (nc == NULL) {
 		D("cannot open %s", config);
 		return (1);
 	}
 	state.vs_nm_config = nc;
+	if (egress == NULL || config == NULL)
+		return (0);
+	ni = nm_open(ingress, NULL, NM_OPEN_NO_MMAP, nc);
+	if (ni == NULL) {
+		D("cannot open %s", ingress);
+		return (1);
+	}
+	ne = nm_open(egress, NULL, NM_OPEN_NO_MMAP, nc);
+	if (ne == NULL) {
+		D("cannot open %s", egress);
+		return (1);
+	}
 	state.vs_nm_egress = ne;
 	state.vs_nm_ingress = ni;
 
-	return 0;
+	return (0);
 }
 
 int
@@ -107,10 +105,11 @@ main(int argc, char *const argv[])
 	char *ingress, *egress, *config, *log;
 	uint64_t pmac, cmac;
 	vxstate_t state;
+	bool debug;
 
 	ingress = egress = config = NULL;
 	pmac = cmac = 0;
-	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:")) != -1) {
+	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:d")) != -1) {
 		switch (ch) {
 			case 'i':
 				ingress = optarg;
@@ -130,6 +129,9 @@ main(int argc, char *const argv[])
 			case 'l':
 				log = optarg;
 				break;
+			case 'd':
+				debug = true;
+				break;
 			case '?':
 			default:
 				usage(argv[0]);
@@ -143,16 +145,16 @@ main(int argc, char *const argv[])
 		printf("missing bridge configuration mac address\n");
 		usage(argv[0]);
 	}
-	if (ingress == NULL) {
+	if (config == NULL) {
+		printf("missing config netmap interface\n");
+		usage(argv[0]);
+	}
+	if (ingress == NULL && !debug) {
 		printf("missing ingress netmap interface\n");
 		usage(argv[0]);
 	}
-	if (egress == NULL) {
+	if (egress == NULL && !debug) {
 		printf("missing egress netmap interface\n");
-		usage(argv[0]);
-	}
-	if (config == NULL) {
-		printf("missing config netmap interface\n");
 		usage(argv[0]);
 	}
 	state.vs_prov_mac = pmac;
