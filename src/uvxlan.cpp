@@ -59,48 +59,51 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t *state,
 				 struct netmap_ring *txring, u_int *pidx)
 {
 	struct arphdr_ether *sah, *dah;
+	int op;
 
 	sah = (struct arphdr_ether *)(rxbuf + ETHER_HDR_LEN);
 	dah = (struct arphdr_ether *)(txbuf + ETHER_HDR_LEN);
-	switch (sah->ae_req) {
-		case AE_REQUEST:
-			A(AE_REQUEST);
+	op = ntohs(sah->ae_hdr.fields.ar_op);
+
+	switch (op) {
+		case ARPOP_REQUEST:
+			A(ARPOP_REQUEST);
 			break;
-		case AE_REPLY:
-			A(AE_REPLY);
+		case ARPOP_REPLY:
+			A(ARPOP_REPLY);
 			break;
-		case AE_REVREQUEST:
-			A(AE_REVREQUEST);
+		case ARPOP_REVREQUEST:
+			A(ARPOP_REVREQUEST);
 			break;
-		case AE_REVREPLY:
-			A(AE_REVREPLY);
+		case ARPOP_REVREPLY:
+			A(ARPOP_REVREPLY);
 			break;
-		case AE_REQUEST_ALL:
-			A(AE_REQUEST_ALL);
+		case ARPOP_REQUEST_ALL:
+			A(ARPOP_REQUEST_ALL);
 			break;
-		case AE_REVREQUEST_ALL:
-			A(AE_REVREQUEST_ALL);
+		case ARPOP_REVREQUEST_ALL:
+			A(ARPOP_REVREQUEST_ALL);
 			break;
-		case AE_VM_VXLANID_REQUEST:
-			A(AE_VM_VXLANID_REQUEST);
+		case ARPOP_VM_VXLANID_REQUEST:
+			A(ARPOP_VM_VXLANID_REQUEST);
 			break;
-		case AE_VM_VXLANID_REQUEST_ALL:
-			A(AE_VM_VXLANID_REQUEST_ALL);
+		case ARPOP_VM_VXLANID_REQUEST_ALL:
+			A(ARPOP_VM_VXLANID_REQUEST_ALL);
 			break;
-		case AE_VM_VXLANID_REPLY:
-			A(AE_VM_VXLANID_REPLY);
+		case ARPOP_VM_VXLANID_REPLY:
+			A(ARPOP_VM_VXLANID_REPLY);
 			break;
-		case AE_VM_VLANID_REQUEST:
-			A(AE_VM_VLANID_REQUEST);
+		case ARPOP_VM_VLANID_REQUEST:
+			A(ARPOP_VM_VLANID_REQUEST);
 			break;
-		case AE_VM_VLANID_REQUEST_ALL:
-			A(AE_VM_VLANID_REQUEST);
+		case ARPOP_VM_VLANID_REQUEST_ALL:
+			A(ARPOP_VM_VLANID_REQUEST);
 			break;
-		case AE_VM_VLANID_REPLY:
-			A(AE_VM_VLANID_REPLY);
+		case ARPOP_VM_VLANID_REPLY:
+			A(ARPOP_VM_VLANID_REPLY);
 			break;
 		default:
-			printf("unrecognized value: 0x%016lX\n", sah->ae_req);
+			printf("unrecognized value data: 0x%016lX op: 0x%02X\n", sah->ae_hdr.data, op);
 	}
 }
 

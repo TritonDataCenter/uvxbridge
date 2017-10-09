@@ -228,7 +228,10 @@ struct	arphdr {
 #define ar_tpa(ap)	(((caddr_t)((ap)+1)) + 2*(ap)->ar_hln + (ap)->ar_pln)
 
 struct arphdr_ether {
-	uint64_t ae_req;
+	union {
+		uint64_t data;
+		struct arphdr fields;
+	} ae_hdr;
 	uint8_t	 ae_sha[ETHER_ADDR_LEN];
 	uint32_t ae_spa;
 	uint8_t	 ae_dha[ETHER_ADDR_LEN];
