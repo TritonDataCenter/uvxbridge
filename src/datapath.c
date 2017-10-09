@@ -33,6 +33,7 @@
  * SUCH DAMAGE.
  */
 
+#include <stdint.h>
 #include <stdio.h>
 #define NETMAP_WITH_LIBS
 #include <net/netmap_user.h>
@@ -56,7 +57,7 @@ sigint_h(int sig)
 /*
  * how many packets on this set of queues ?
  */
-static int
+static u_int
 pkt_queued(struct nm_desc *d, int tx)
 {
 	u_int i, tot = 0;
@@ -76,7 +77,7 @@ pkt_queued(struct nm_desc *d, int tx)
 /*
  * move up to _limit_ pkts from rxring to txring swapping buffers.
  */
-static int
+static u_int
 process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 			  u_int limit, const char *msg, pkt_dispatch_t dispatch,
 			  void *arg, datadir_t dir)
@@ -149,13 +150,13 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 	rxring->head = rxring->cur = j;
 	txring->head = txring->cur = k;
 	if (verbose && m > 0)
-		D("%s sent %d packets to %p", msg, m, txring);
+	    D("%s sent %d packets to %p", msg, m, (void *)txring);
 
 	return (m);
 }
 
 /* move packets from src to destination */
-static int
+static u_int
 move(struct nm_desc *src, struct nm_desc *dst, u_int limit,
 	 pkt_dispatch_t dispatch, void *arg, datadir_t dir)
 {
@@ -198,7 +199,8 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
 	/* main loop */
 	signal(SIGINT, sigint_h);
 	while (!do_abort) {
-		int n0, n1, ret;
+	    u_int n0, n1;
+	    int ret;
 		pollfd[0].events = pollfd[1].events = 0;
 		pollfd[0].revents = pollfd[1].revents = 0;
 		n0 = pkt_queued(pa, 0);
