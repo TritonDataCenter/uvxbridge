@@ -285,14 +285,16 @@ run_datapath(dp_args_t *port_args, pkt_dispatch_t dispatch, void *arg)
 		D("cannot open %s", pa_name);
 		return (1);
 	}
-	*(port_args->da_pa) = pa;
+	if (port_args->da_pa != NULL)
+	    *(port_args->da_pa) = pa;
 	if (pb_name != NULL) {
 		pb = nm_open(pb_name, NULL, NM_OPEN_NO_MMAP, pa);
 		if (pb == NULL) {
 			D("cannot open %s", pb_name);
 			return (1);
 		}
-		*(port_args->da_pb) = pb;
+		if (port_args->da_pb != NULL)
+		    *(port_args->da_pb) = pb;
 	} else
 		pb = pa;
 	return run_datapath_priv(pa, pb, dispatch, arg);
