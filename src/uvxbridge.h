@@ -139,7 +139,6 @@ typedef struct vxlan_state {
 
 void cmd_dispatch(char *rxbuf, char *txbuf, uint16_t len, vxstate_t &state,
 				  struct netmap_ring *, u_int *);
-int run_datapath(vxstate_t &state);
-int run_controlpath(vxstate_t &state);
+int run_datapath(vxstate_t &state, struct nm_desc *ingress, struct nm_desc *egress);
 
 #endif

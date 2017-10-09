@@ -266,16 +266,23 @@ move(struct nm_desc *src, struct nm_desc *dst, u_int limit, vxstate_t &state,
 }
 
 int
-run_datapath(vxstate_t &state)
+run_datapath(vxstate_t &state, struct nm_desc *nm_ingress, struct nm_desc *nm_egress)
 {
 	struct pollfd pollfd[2];
 //	int ch;
 	u_int burst = 1024, wait_link = 4;
 	// pa = host; pb = egress 
-	struct nm_desc *pa = NULL, *pb = NULL;
-//	char *ifa = NULL, *ifb = NULL;
+	struct nm_desc *pa = nm_ingress, *pb = nm_egress;
+	tundir_t in, eg;
 
-	sleep(wait_link);
+	if (nm_ingress == nm_egress) {
+		in = eg = CONTROL;
+	} else {
+		in = INGRESS;
+		eg = EGRESS;
+		sleep(wait_link);
+	}
+
 	/* main loop */
 	signal(SIGINT, sigint_h);
 	while (!do_abort) {
@@ -339,57 +346,13 @@ run_datapath(vxstate_t &state)
 				rx->head, rx->cur, rx->tail);
 		}
 		if (pollfd[0].revents & POLLOUT)
-			move(pb, pa, burst, state, INGRESS);
+			move(pb, pa, burst, state, in);
 
 		if (pollfd[1].revents & POLLOUT)
-			move(pa, pb, burst, state, EGRESS);
+			move(pa, pb, burst, state, eg);
 
 		/* We don't need ioctl(NIOCTXSYNC) on the two file descriptors here,
 		 * kernel will txsync on next poll(). */
 	}	
-	return 0;
-}
-
-int
-run_controlpath(vxstate_t &state)
-{
-	struct pollfd pollfd[1];
-	u_int burst = 1024;
-	struct nm_desc *pa = state.vs_nm_config;
-
-	/* main loop */
-	signal(SIGINT, sigint_h);
-	while (!do_abort) {
-		int n0, ret;
-		pollfd[0].events = 0;
-		pollfd[0].revents = 0;
-		n0 = pkt_queued(pa, 0);
-		if (!n0)
-			pollfd[0].events |= POLLIN;
-		pollfd[0].events |= POLLOUT;
-
-		/* poll() also cause kernel to txsync/rxsync the NICs */
-		ret = poll(pollfd, 1, 2500);
-		if (ret <= 0 || verbose)
-		    D("poll %s [0] ev %x %x rx %d@%d tx %d,",
-				ret <= 0 ? "timeout" : "ok",
-				pollfd[0].events,
-				pollfd[0].revents,
-				pkt_queued(pa, 0),
-				NETMAP_RXRING(pa->nifp, pa->cur_rx_ring)->cur,
-				pkt_queued(pa, 1)
-			);
-		if (ret < 0)
-			continue;
-		if (pollfd[0].revents & POLLERR) {
-			struct netmap_ring *rx = NETMAP_RXRING(pa->nifp, pa->cur_rx_ring);
-			D("error on fd0, rx [%d,%d,%d)",
-				rx->head, rx->cur, rx->tail);
-		}
-		if (pollfd[0].revents & POLLOUT)
-			move(pa, pa, burst, state, CONTROL);
-		/* We don't need ioctl(NIOCTXSYNC) on the file descriptor here,
-		 * kernel will txsync on next poll(). */
-	}
 	return 0;
 }
