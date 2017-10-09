@@ -60,6 +60,8 @@ typedef struct {
  * {
  *    int *count = arg;
  *    int *tx_count = (int *)txbuf;
+ *
+ *    printf("received %dth packet\n", *count);
  *    *tx_count = *count;
  *    (*count)++;
  *    *(ps->ps_tx_len) = sizeof(int);
@@ -77,6 +79,18 @@ typedef int (*pkt_dispatch_t)(char *txbuf, char *rxbuf, path_state_t *ps, void *
  *      port_args: names of ports and resulting nm_descs 
  *      dispatch: the rx packet handler
  *      arg: the arg passed to dispatch
+ *
+ * void
+ * my_example_loop(void)
+ * {
+ *    dp_args_t port_args;
+ *    int count;
+ *
+ *    count = 0;
+ *    bzero(&port_args, sizeof(dp_args_t));
+ *    port_args.pa_name = "netmap:em1";
+ *    run_datapath(&port_args, rx_count_dispatch, &count);
+ * }
  *
  */
 int run_datapath(dp_args_t *port_args, pkt_dispatch_t dispatch, void *arg);
