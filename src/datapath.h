@@ -2,7 +2,7 @@
 #define DATAPATH_H_
 
 #ifdef __cplusplus
-extern “C” {
+extern "C" {
 #endif
 typedef enum {
 	AtoB,
@@ -25,8 +25,8 @@ typedef struct {
 typedef struct {
 	char *da_pa_name; /* name of the first netmap port */
 	char *da_pb_name; /* optional name of the second netmap port */
-	struct nm_desc **da_pa; /* pointer to where to store a’s nm_desc */
-	struct nm_desc **da_pb; /* pointer to where to store b’s nm_desc */
+	struct nm_desc **da_pa; /* pointer to where to store a's nm_desc */
+	struct nm_desc **da_pb; /* pointer to where to store b's nm_desc */
 } dp_args_t;
 
 /*
