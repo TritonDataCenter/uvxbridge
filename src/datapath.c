@@ -38,7 +38,7 @@
 #include <net/netmap_user.h>
 #include <sys/poll.h>
 
-#include "datapath.h"
+#include “datapath.h”
 
 static int verbose = 0;
 
@@ -84,11 +84,14 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 	u_int j, k, m = 0;
 	path_state_t ps;
 
-	ps.ps_pidx = &k;
+	ps.ps_tx_pidx = &k;
+	ps.ps_rx_pidx = &j;
 	ps.ps_dir = dir;
+	ps.ps_rxring = rxring;
+	ps.ps_txring = txring;
 	/* print a warning if any of the ring flags is set (e.g. NM_REINIT) */
 	if (rxring->flags || txring->flags)
-		D("%s rxflags %x txflags %x",
+		D(“%s rxflags %x txflags %x”,
 			msg, rxring->flags, txring->flags);
 	j = rxring->cur; /* RX */
 	k = txring->cur; /* TX */
@@ -99,25 +102,26 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 	if (m < limit)
 		limit = m;
 	m = limit;
-	while (limit-- > 0) {
+	while (limit— > 0) {
 		struct netmap_slot *rs = &rxring->slot[j];
 		struct netmap_slot *ts = &txring->slot[k];
 		char *rxbuf, *txbuf;
 
 		/* swap packets */
 		if (ts->buf_idx < 2 || rs->buf_idx < 2) {
-			D("wrong index rx[%d] = %d  -> tx[%d] = %d",
+			D(“wrong index rx[%d] = %d  -> tx[%d] = %d”,
 				j, rs->buf_idx, k, ts->buf_idx);
 			sleep(2);
 		}
 		/* copy the packet length. */
 		if (rs->len > 2048) {
-			D("wrong len %d rx[%d] -> tx[%d]", rs->len, j, k);
+			D(“wrong len %d rx[%d] -> tx[%d]”, rs->len, j, k);
 			rs->len = 0;
 		} else if (verbose > 1) {
-			D("%s send len %d rx[%d] -> tx[%d]", msg, rs->len, j, k);
+			D(“%s send len %d rx[%d] -> tx[%d]”, msg, rs->len, j, k);
 		}
-		ts->len = rs->len;
+		ps.ps_rx_len = rs->len;
+		ps.ps_tx_len = &ts->len;
 #ifdef original
 		if (zerocopy) {
 			uint32_t pkt = ts->buf_idx;
@@ -139,14 +143,13 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 		rxbuf = NETMAP_BUF(rxring, rs->buf_idx);
 		txbuf = NETMAP_BUF(txring, ts->buf_idx);
 		j = nm_ring_next(rxring, j);
-		ps.ps_txring = txring;
-		if (dispatch(rxbuf, txbuf, ts->len, arg, &ps))
+		if (dispatch(rxbuf, txbuf, &ps, arg))
 			k = nm_ring_next(txring, k);
 	}
 	rxring->head = rxring->cur = j;
 	txring->head = txring->cur = k;
 	if (verbose && m > 0)
-		D("%s sent %d packets to %p", msg, m, txring);
+		D(“%s sent %d packets to %p”, msg, m, txring);
 
 	return (m);
 }
@@ -159,12 +162,12 @@ move(struct nm_desc *src, struct nm_desc *dst, u_int limit,
 	struct netmap_ring *txring, *rxring;
 	u_int m = 0, si = src->first_rx_ring, di = dst->first_tx_ring;
 	const char *msg = (src->req.nr_flags == NR_REG_SW) ?
-		"host->net" : "net->host";
+		“host->net” : “net->host”;
 
 	while (si <= src->last_rx_ring && di <= dst->last_tx_ring) {
 		rxring = NETMAP_RXRING(src->nifp, si);
 		txring = NETMAP_TXRING(dst->nifp, di);
-		ND("txring %p rxring %p", txring, rxring);
+		ND(“txring %p rxring %p”, txring, rxring);
 		if (nm_ring_empty(rxring)) {
 			si++;
 			continue;
@@ -228,9 +231,9 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
 		ret = poll(pollfd, 2, 2500);
 #endif /* defined(_WIN32) || defined(BUSYWAIT) */
 		if (ret <= 0 || verbose) {
-		    D("poll %s [0] ev %x %x rx %d@%d tx %d,"
-			     " [1] ev %x %x rx %d@%d tx %d",
-				ret <= 0 ? "timeout" : "ok",
+		    D(“poll %s [0] ev %x %x rx %d@%d tx %d,”
+			     “ [1] ev %x %x rx %d@%d tx %d”,
+				ret <= 0 ? “timeout” : “ok”,
 				pollfd[0].events,
 				pollfd[0].revents,
 				pkt_queued(pa, 0),
@@ -247,12 +250,12 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
 			continue;
 		if (pollfd[0].revents & POLLERR) {
 			struct netmap_ring *rx = NETMAP_RXRING(pa->nifp, pa->cur_rx_ring);
-			D("error on fd0, rx [%d,%d,%d)",
+			D(“error on fd0, rx [%d,%d,%d)”,
 				rx->head, rx->cur, rx->tail);
 		}
 		if (pollfd[1].revents & POLLERR) {
 			struct netmap_ring *rx = NETMAP_RXRING(pb->nifp, pb->cur_rx_ring);
-			D("error on fd1, rx [%d,%d,%d)",
+			D(“error on fd1, rx [%d,%d,%d)”,
 				rx->head, rx->cur, rx->tail);
 		}
 		if (pollfd[0].revents & POLLOUT)
@@ -261,7 +264,7 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
 		if (pollfd[1].revents & POLLOUT)
 			move(pa, pb, burst, dispatch, arg, AtoB);
 
-		/* We don't need ioctl(NIOCTXSYNC) on the two file descriptors here,
+		/* We don’t need ioctl(NIOCTXSYNC) on the two file descriptors here,
 		 * kernel will txsync on next poll(). */
 	}	
 	return 0;
@@ -279,14 +282,14 @@ run_datapath(dp_args_t *port_args, pkt_dispatch_t dispatch, void *arg)
 
 	pa = nm_open(pa_name, NULL, 0, NULL);
 	if (pa == NULL) {
-		D("cannot open %s", pa_name);
+		D(“cannot open %s”, pa_name);
 		return (1);
 	}
 	*(port_args->da_pa) = pa;
 	if (pb_name != NULL) {
 		pb = nm_open(pb_name, NULL, NM_OPEN_NO_MMAP, pa);
 		if (pb == NULL) {
-			D("cannot open %s", pb_name);
+			D(“cannot open %s”, pb_name);
 			return (1);
 		}
 		*(port_args->da_pb) = pb;
