@@ -875,43 +875,47 @@ cmd_dispatch(int cfd, char *input, struct vxlan_state &state)
 #endif
 
 bool
-cmd_dispatch_ip(char *rxbuf, char *txbuf, vxstate_t &state)
+cmd_dispatch_ip(char *rxbuf, char *txbuf, vxstate_t *state)
 {
 	abort();
 	return true;
 }
 
-void
-cmd_dispatch(char *rxbuf, char *txbuf, uint16_t len, vxstate_t &state,
-			 struct netmap_ring *txring, u_int *pidx)
+int
+cmd_dispatch(char *rxbuf, char *txbuf, uint16_t len, void *state, path_state_t *ps)
 {
 	struct ether_header *eh;
+	vxstate_t *vs = (vxstate_t *)state;
 	uint64_t dmac;
+	struct netmap_ring *txring = ps->ps_txring;
+	u_int *pidx = ps->ps_pidx;
 	int etype;
 
 	if (len < ETHER_HDR_LEN + sizeof(struct arphdr_ether))
-		return;
+		return 0;
 	eh = (struct ether_header *)rxbuf;
 	etype = ntohs(eh->ether_type);
 	dmac = le64toh(*(uint64_t *)(rxbuf))& 0xffffffffffff;
 
 	/* XXX check source mac too */
-	if (dmac != state.vs_ctrl_mac) {
+	if (dmac != vs->vs_ctrl_mac) {
 		D("received control message to %lx expect %lx\n",
-		  dmac, state.vs_ctrl_mac);
-		return;
+		  dmac, vs->vs_ctrl_mac);
+		return 0;
 	}
 
 	switch(etype) {
 		case ETHERTYPE_ARP:
-			cmd_dispatch_arp(rxbuf, txbuf, state, txring, pidx);
+			cmd_dispatch_arp(rxbuf, txbuf, vs, txring, pidx);
+			return 0;
 			break;
 		case ETHERTYPE_IP:
-			if (cmd_dispatch_ip(rxbuf, txbuf, state))
-				*pidx = nm_ring_next(txring, *pidx);
+			if (cmd_dispatch_ip(rxbuf, txbuf, vs))
+				return 1;
 			break;
 		default:
 			/* we only support ipv4 - XXX */
 			/* UNHANDLED */;
 	}
+	return 0;
 }

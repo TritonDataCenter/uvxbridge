@@ -166,6 +166,6 @@ main(int argc, char *const argv[])
 	/* start datapath thread */
 	/* .... */
 
-	run_datapath(state, state.vs_nm_config, state.vs_nm_config);
+	run_datapath_priv(state.vs_nm_config, state.vs_nm_config, cmd_dispatch, &state);
 	return 0;
 }

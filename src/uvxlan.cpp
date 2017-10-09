@@ -55,7 +55,7 @@
 #define A(val) printf("got %s\n", #val)
 
 void
-cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t &state,
+cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t *state,
 				 struct netmap_ring *txring, u_int *pidx)
 {
 	struct arphdr_ether *sah, *dah;

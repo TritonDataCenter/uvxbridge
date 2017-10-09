@@ -238,7 +238,7 @@ struct arphdr_ether {
 
 bool nd_request(struct arphdr_ether *sae, struct arphdr_ether *dae,
 				vxstate_t &state, l2tbl_t &tbl);
-void cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t &state,
+void cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t *state,
 					  struct netmap_ring *txring, u_int *pidx);
 
 

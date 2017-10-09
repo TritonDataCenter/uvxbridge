@@ -46,11 +46,6 @@ static int verbose = 0;
 static int do_abort = 0;
 //static int zerocopy = 1; /* enable zerocopy if possible */
 
-typedef enum tundir {
-	EGRESS,
-	INGRESS,
-	CONTROL
-} tundir_t;
 
 static void
 sigint_h(int sig)
@@ -80,100 +75,19 @@ pkt_queued(struct nm_desc *d, int tx)
 	return tot;
 }
 
-static struct netmap_ring *
-vx_txring(vxstate_t &state, tundir_t dir)
-{
-	abort();
-	return NULL;
-}
-
-static void
-nd_dispatch(char *rxbuf, uint16_t len, vxstate_t &state, tundir_t dir)
-{
-	struct netmap_ring *txring;
-	struct ether_vlan_header *evh, *evhrsp;
-	struct arphdr_ether dae, *sae;
-	int hdrlen, etype;
-	bool hit = false;
-
-	txring = vx_txring(state, dir);
-	if (__predict_false(nm_ring_space(txring) == 0))
-		return;
-
-	evh = (struct ether_vlan_header *)(rxbuf);
-	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
-		hdrlen = ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN;
-		etype = ntohs(evh->evl_proto);
-	} else {
-		hdrlen = ETHER_HDR_LEN;
-		etype = ntohs(evh->evl_encap_proto);
-	}
-	/* bad packet size - XXX do we have 18 bytes of PAD? */
-	if (__predict_false(len != hdrlen + sizeof(struct arphdr_ether)))
-		return;
-
-	sae = (struct arphdr_ether *)(rxbuf + hdrlen);
-	if (dir == INGRESS)
-		hit = nd_request(sae, &dae, state, state.vs_l2_phys);
-	if (hit) {
-		int k = txring->cur;
-		struct netmap_slot *ts = &txring->slot[k];
-		char *txbuf = NETMAP_BUF(txring, ts->buf_idx);
-
-		/* advance ring */
-		txring->head = txring->cur = nm_ring_next(txring, k);
-		/* fill in response */
-		evhrsp = (struct ether_vlan_header *)(txbuf);
-		memcpy(&evhrsp->evl_dhost, &evh->evl_shost, ETHER_ADDR_LEN);
-		memcpy(&evhrsp->evl_shost, &evh->evl_dhost, ETHER_ADDR_LEN);
-		evhrsp->evl_encap_proto = etype;
-		if (hdrlen != ETHER_HDR_LEN) {
-			evhrsp->evl_tag = evh->evl_tag;
-			evhrsp->evl_proto = evh->evl_proto;
-		}
-		memcpy(txbuf + hdrlen, &dae, sizeof(struct arphdr_ether));
-	}
-}
-
-static void
-pkt_dispatch(char *rxbuf, char *txbuf, uint16_t len, vxstate_t &state,
-			 tundir_t dir, struct netmap_ring *txring, u_int *pidx)
-{
-	struct ether_vlan_header *evh;
-	int etype;
-	bool consumed = false;
-
-	if (__predict_false(dir == CONTROL)) {
-		cmd_dispatch(rxbuf, txbuf, len, state, txring, pidx);
-		return;
-	}
-
-	evh = (struct ether_vlan_header *)(rxbuf);
-	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN))
-		etype = ntohs(evh->evl_proto);
-   else
-		etype = ntohs(evh->evl_encap_proto);
-
-	/* XXX we only handle ipv4 here for v0 */
-	if (__predict_false(etype == ETHERTYPE_ARP)) {
-		nd_dispatch(rxbuf, len, state, dir);
-	} else if (dir == INGRESS)
-		consumed = vxlan_decap(rxbuf, txbuf, len, state);
-	else
-		consumed = vxlan_encap(rxbuf, txbuf, len, state);
-	if (consumed)
-		*pidx = nm_ring_next(txring, *pidx);
-}
-
 /*
  * move up to _limit_ pkts from rxring to txring swapping buffers.
  */
 static int
 process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
-			  u_int limit, const char *msg, vxstate_t &state, tundir_t dir)
+			  u_int limit, const char *msg, pkt_dispatch_t dispatch,
+			  void *arg, datadir_t dir)
 {
 	u_int j, k, m = 0;
+	path_state_t ps;
 
+	ps.ps_pidx = &k;
+	ps.ps_dir = dir;
 	/* print a warning if any of the ring flags is set (e.g. NM_REINIT) */
 	if (rxring->flags || txring->flags)
 		D("%s rxflags %x txflags %x",
@@ -227,7 +141,9 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 		rxbuf = NETMAP_BUF(rxring, rs->buf_idx);
 		txbuf = NETMAP_BUF(txring, ts->buf_idx);
 		j = nm_ring_next(rxring, j);
-		pkt_dispatch(rxbuf, txbuf, ts->len, state, dir, txring, &k);
+		ps.ps_txring = txring;
+		if (dispatch(rxbuf, txbuf, ts->len, arg, &ps))
+			k = nm_ring_next(txring, k);
 	}
 	rxring->head = rxring->cur = j;
 	txring->head = txring->cur = k;
@@ -239,8 +155,8 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 
 /* move packets from src to destination */
 static int
-move(struct nm_desc *src, struct nm_desc *dst, u_int limit, vxstate_t &state,
-	 tundir_t dir)
+move(struct nm_desc *src, struct nm_desc *dst, u_int limit,
+	 pkt_dispatch_t dispatch, void *arg, datadir_t dir)
 {
 	struct netmap_ring *txring, *rxring;
 	u_int m = 0, si = src->first_rx_ring, di = dst->first_tx_ring;
@@ -259,29 +175,46 @@ move(struct nm_desc *src, struct nm_desc *dst, u_int limit, vxstate_t &state,
 			di++;
 			continue;
 		}
-		m += process_rings(rxring, txring, limit, msg, state, dir);
+		m += process_rings(rxring, txring, limit, msg, dispatch, arg, dir);
 	}
 
 	return (m);
 }
 
 int
-run_datapath(vxstate_t &state, struct nm_desc *nm_ingress, struct nm_desc *nm_egress)
+run_datapath(char *ingress, char *egress, pkt_dispatch_t dispatch, void *arg)
+{
+
+	struct nm_desc *pa, *pb;
+
+	pa = nm_open(ingress, NULL, 0, NULL);
+	if (pa == NULL) {
+		D("cannot open %s", ingress);
+		return (1);
+	}
+	if (egress != NULL) {
+		pb = nm_open(egress, NULL, NM_OPEN_NO_MMAP, pa);
+		if (pb == NULL) {
+			D("cannot open %s", egress);
+			return (1);
+		}
+	} else
+		pb = pa;
+	return run_datapath_priv(pa, pb, dispatch, arg);
+}
+
+// pa = host; pb = egress
+int
+run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
+				  pkt_dispatch_t dispatch, void *arg)
 {
 	struct pollfd pollfd[2];
 //	int ch;
 	u_int burst = 1024, wait_link = 4;
-	// pa = host; pb = egress 
-	struct nm_desc *pa = nm_ingress, *pb = nm_egress;
-	tundir_t in, eg;
 
-	if (nm_ingress == nm_egress) {
-		in = eg = CONTROL;
-	} else {
-		in = INGRESS;
-		eg = EGRESS;
+	if (pa != pb)
 		sleep(wait_link);
-	}
+
 
 	/* main loop */
 	signal(SIGINT, sigint_h);
@@ -346,10 +279,10 @@ run_datapath(vxstate_t &state, struct nm_desc *nm_ingress, struct nm_desc *nm_eg
 				rx->head, rx->cur, rx->tail);
 		}
 		if (pollfd[0].revents & POLLOUT)
-			move(pb, pa, burst, state, in);
+			move(pb, pa, burst, dispatch, arg, INGRESS);
 
 		if (pollfd[1].revents & POLLOUT)
-			move(pa, pb, burst, state, eg);
+			move(pa, pb, burst, dispatch, arg, EGRESS);
 
 		/* We don't need ioctl(NIOCTXSYNC) on the two file descriptors here,
 		 * kernel will txsync on next poll(). */

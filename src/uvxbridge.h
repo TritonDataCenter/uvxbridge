@@ -135,10 +135,51 @@ typedef struct vxlan_state {
 
 } vxstate_t;
 
+typedef enum {
+	EGRESS,
+	INGRESS
+} datadir_t;
+typedef struct {
+	struct netmap_ring *ps_txring;
+	u_int *ps_pidx;
+	datadir_t ps_dir;
+} path_state_t;
 
+int cmd_dispatch(char *rxbuf, char *txbuf, uint16_t len, void *state, path_state_t *);
 
-void cmd_dispatch(char *rxbuf, char *txbuf, uint16_t len, vxstate_t &state,
-				  struct netmap_ring *, u_int *);
-int run_datapath(vxstate_t &state, struct nm_desc *ingress, struct nm_desc *egress);
+/*
+ * PUBLIC - more general interface to netmap below:
+ * 
+ * 
+ * pkt_dispatch_t: handles a packet
+ * returns: 1 if txbuf was consumed else 0
+ *   args:
+ *    txbuf: response packet
+ *    rxbuf: received packet
+ *    len: size of rxbuf
+ *    arg: pointer to persistent state
+ *    ps: only used by callers that need to send more than one packet in
+ *        response
+ *
+ */
+typedef int (*pkt_dispatch_t)(char *txbuf, char *rxbuf, uint16_t len, void *arg, path_state_t *);
+
+/*
+ * run_datapath: executes event loop of packet handling
+ *    returns: 1 on failure otherwise 0 if exits gracefully
+ *    args:
+ *     ingress: the name of the ingress netmap port 
+ *     egress: the name of the (optional) egress netmap port (can be NULL)
+ *    dispatch: the rx packet handler
+ *    arg: the arg passed to dispatch
+ *
+ */
+int run_datapath(char *ingress, char *egress, pkt_dispatch_t dispatch, void *arg);
+
+/*
+ * PRIVATE - used if we want to share mmap between more than 2 interfaces
+ */
+int run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t dispatch, void *arg);
+
 
 #endif
