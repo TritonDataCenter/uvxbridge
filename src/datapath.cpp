@@ -182,20 +182,20 @@ move(struct nm_desc *src, struct nm_desc *dst, u_int limit,
 }
 
 int
-run_datapath(char *ingress, char *egress, pkt_dispatch_t dispatch, void *arg)
+run_datapath(char *pa_name, char *pb_name, pkt_dispatch_t dispatch, void *arg)
 {
 
 	struct nm_desc *pa, *pb;
 
-	pa = nm_open(ingress, NULL, 0, NULL);
+	pa = nm_open(pa_name, NULL, 0, NULL);
 	if (pa == NULL) {
-		D("cannot open %s", ingress);
+		D("cannot open %s", pa_name);
 		return (1);
 	}
-	if (egress != NULL) {
-		pb = nm_open(egress, NULL, NM_OPEN_NO_MMAP, pa);
+	if (pb_name != NULL) {
+		pb = nm_open(pb_name, NULL, NM_OPEN_NO_MMAP, pa);
 		if (pb == NULL) {
-			D("cannot open %s", egress);
+			D("cannot open %s", pb_name);
 			return (1);
 		}
 	} else
@@ -279,10 +279,10 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
 				rx->head, rx->cur, rx->tail);
 		}
 		if (pollfd[0].revents & POLLOUT)
-			move(pb, pa, burst, dispatch, arg, INGRESS);
+			move(pb, pa, burst, dispatch, arg, BtoA);
 
 		if (pollfd[1].revents & POLLOUT)
-			move(pa, pb, burst, dispatch, arg, EGRESS);
+			move(pa, pb, burst, dispatch, arg, AtoB);
 
 		/* We don't need ioctl(NIOCTXSYNC) on the two file descriptors here,
 		 * kernel will txsync on next poll(). */

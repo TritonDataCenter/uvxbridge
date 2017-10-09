@@ -136,9 +136,10 @@ typedef struct vxlan_state {
 } vxstate_t;
 
 typedef enum {
-	EGRESS,
-	INGRESS
+	AtoB,
+	BtoA
 } datadir_t;
+
 typedef struct {
 	struct netmap_ring *ps_txring;
 	u_int *ps_pidx;
@@ -168,18 +169,19 @@ typedef int (*pkt_dispatch_t)(char *txbuf, char *rxbuf, uint16_t len, void *arg,
  * run_datapath: executes event loop of packet handling
  *    returns: 1 on failure otherwise 0 if exits gracefully
  *    args:
- *     ingress: the name of the ingress netmap port 
- *     egress: the name of the (optional) egress netmap port (can be NULL)
+ *     porta: name of the first netmap port 
+ *     portb: name of the (optional - may be NULL) second netmap port
  *    dispatch: the rx packet handler
  *    arg: the arg passed to dispatch
  *
  */
-int run_datapath(char *ingress, char *egress, pkt_dispatch_t dispatch, void *arg);
+int run_datapath(char *porta, char *portb, pkt_dispatch_t dispatch, void *arg);
 
 /*
  * PRIVATE - used if we want to share mmap between more than 2 interfaces
  */
-int run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t dispatch, void *arg);
+int run_datapath_priv(struct nm_desc *porta, struct nm_desc *portb,
+					  pkt_dispatch_t dispatch, void *arg);
 
 
 #endif
