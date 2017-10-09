@@ -1,7 +1,7 @@
 # uvxbridge
 user level vxlan bridge
 
-uvxbridge -i <ingress> -e <egress> -c <config> -m <config mac address> -p <provisioning agent mac address>
+uvxbridge -i \<ingress\> -e \<egress\> -c \<config\> -m \<config mac address\> -p \<provisioning agent mac address\> [-d]
 
 v0.1:
 2017.10.13 - Friday
