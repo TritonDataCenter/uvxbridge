@@ -67,38 +67,6 @@ mac_parse(char *input)
 	return  *(uint64_t *)&mac_num;
 }
 
-
-static int
-netmap_setup(vxstate_t &state, char *ingress, char *egress, char *config)
-{
-	struct nm_desc *ni, *ne, *nc;
-
-	ni = ne = nc = NULL;
-
-	nc = nm_open(config, NULL, 0, NULL);
-	if (nc == NULL) {
-		D("cannot open %s", config);
-		return (1);
-	}
-	state.vs_nm_config = nc;
-	if (egress == NULL || config == NULL)
-		return (0);
-	ni = nm_open(ingress, NULL, NM_OPEN_NO_MMAP, nc);
-	if (ni == NULL) {
-		D("cannot open %s", ingress);
-		return (1);
-	}
-	ne = nm_open(egress, NULL, NM_OPEN_NO_MMAP, nc);
-	if (ne == NULL) {
-		D("cannot open %s", egress);
-		return (1);
-	}
-	state.vs_nm_egress = ne;
-	state.vs_nm_ingress = ni;
-
-	return (0);
-}
-
 int
 main(int argc, char *const argv[])
 {
@@ -161,10 +129,6 @@ main(int argc, char *const argv[])
 	}
 	state.vs_prov_mac = pmac;
 	state.vs_ctrl_mac = cmac;
-	if (netmap_setup(state, ingress, egress, config)) {
-		printf("netmap setup failed - cannot continue\n");
-		exit(1);
-	}
 	/* start datapath thread */
 	/* .... */
 	port_args.da_pa_name = config;

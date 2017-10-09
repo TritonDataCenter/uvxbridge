@@ -38,18 +38,12 @@
 #include <net/netmap_user.h>
 #include <sys/poll.h>
 
-#include "uvxbridge.h"
-#include "uvxlan.h"
 #include "datapath.h"
 
 static int verbose = 0;
 
 static int do_abort = 0;
 //static int zerocopy = 1; /* enable zerocopy if possible */
-
-static int run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
-							 pkt_dispatch_t dispatch, void *arg);
-
 
 static void
 sigint_h(int sig)
@@ -185,34 +179,6 @@ move(struct nm_desc *src, struct nm_desc *dst, u_int limit,
 	return (m);
 }
 
-int
-run_datapath(dp_args_t *port_args, pkt_dispatch_t dispatch, void *arg)
-{
-
-	struct nm_desc *pa, *pb;
-	char *pa_name, *pb_name;
-
-	pa_name = port_args->da_pa_name;
-	pb_name = port_args->da_pb_name;
-
-	pa = nm_open(pa_name, NULL, 0, NULL);
-	if (pa == NULL) {
-		D("cannot open %s", pa_name);
-		return (1);
-	}
-	*(port_args->da_pa) = pa;
-	if (pb_name != NULL) {
-		pb = nm_open(pb_name, NULL, NM_OPEN_NO_MMAP, pa);
-		if (pb == NULL) {
-			D("cannot open %s", pb_name);
-			return (1);
-		}
-		*(port_args->da_pb) = pb;
-	} else
-		pb = pa;
-	return run_datapath_priv(pa, pb, dispatch, arg);
-}
-
 // pa = host; pb = egress
 static int
 run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
@@ -261,7 +227,7 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
 		/* poll() also cause kernel to txsync/rxsync the NICs */
 		ret = poll(pollfd, 2, 2500);
 #endif /* defined(_WIN32) || defined(BUSYWAIT) */
-		if (ret <= 0 || verbose)
+		if (ret <= 0 || verbose) {
 		    D("poll %s [0] ev %x %x rx %d@%d tx %d,"
 			     " [1] ev %x %x rx %d@%d tx %d",
 				ret <= 0 ? "timeout" : "ok",
@@ -275,7 +241,8 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
 				pkt_queued(pb, 0),
 				NETMAP_RXRING(pb->nifp, pb->cur_rx_ring)->cur,
 				pkt_queued(pb, 1)
-			);
+				);
+		}
 		if (ret < 0)
 			continue;
 		if (pollfd[0].revents & POLLERR) {
@@ -298,4 +265,32 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb,
 		 * kernel will txsync on next poll(). */
 	}	
 	return 0;
+}
+
+int
+run_datapath(dp_args_t *port_args, pkt_dispatch_t dispatch, void *arg)
+{
+
+	struct nm_desc *pa, *pb;
+	char *pa_name, *pb_name;
+
+	pa_name = port_args->da_pa_name;
+	pb_name = port_args->da_pb_name;
+
+	pa = nm_open(pa_name, NULL, 0, NULL);
+	if (pa == NULL) {
+		D("cannot open %s", pa_name);
+		return (1);
+	}
+	*(port_args->da_pa) = pa;
+	if (pb_name != NULL) {
+		pb = nm_open(pb_name, NULL, NM_OPEN_NO_MMAP, pa);
+		if (pb == NULL) {
+			D("cannot open %s", pb_name);
+			return (1);
+		}
+		*(port_args->da_pb) = pb;
+	} else
+		pb = pa;
+	return run_datapath_priv(pa, pb, dispatch, arg);
 }
