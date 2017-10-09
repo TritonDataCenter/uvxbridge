@@ -54,26 +54,37 @@
 
 #define A(val) printf("got %s\n", #val)
 
-void
-cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t *state,
-				 struct netmap_ring *txring, u_int *pidx)
+int
+cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
 	struct arphdr_ether *sah, *dah;
-	int op;
+	struct ether_header *eh;
+	int op, len;
+	uint32_t hostip, targetval = 0;
+	uint16_t *rmacp, *lmacp;
+	uint64_t reply = 0;
+
+	len = ps->ps_rx_len;
+	if (len < ETHER_HDR_LEN + sizeof(struct arphdr_ether))
+		return 0;
 
 	sah = (struct arphdr_ether *)(rxbuf + ETHER_HDR_LEN);
 	dah = (struct arphdr_ether *)(txbuf + ETHER_HDR_LEN);
 	op = ntohs(sah->ae_hdr.fields.ar_op);
+	/* place holder */
+	hostip = htobe32(0xDEADBEEF);
 
 	switch (op) {
 		case ARPOP_REQUEST:
 			A(ARPOP_REQUEST);
+			reply = AE_REPLY;
 			break;
 		case ARPOP_REPLY:
 			A(ARPOP_REPLY);
 			break;
 		case ARPOP_REVREQUEST:
 			A(ARPOP_REVREQUEST);
+			reply = AE_REVREPLY;
 			break;
 		case ARPOP_REVREPLY:
 			A(ARPOP_REVREPLY);
@@ -86,6 +97,7 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t *state,
 			break;
 		case ARPOP_VM_VXLANID_REQUEST:
 			A(ARPOP_VM_VXLANID_REQUEST);
+			reply = AE_VM_VXLANID_REPLY;
 			break;
 		case ARPOP_VM_VXLANID_REQUEST_ALL:
 			A(ARPOP_VM_VXLANID_REQUEST_ALL);
@@ -95,6 +107,7 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t *state,
 			break;
 		case ARPOP_VM_VLANID_REQUEST:
 			A(ARPOP_VM_VLANID_REQUEST);
+			reply = AE_VM_VLANID_REPLY;
 			break;
 		case ARPOP_VM_VLANID_REQUEST_ALL:
 			A(ARPOP_VM_VLANID_REQUEST);
@@ -105,6 +118,38 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t *state,
 		default:
 			printf("unrecognized value data: 0x%016lX op: 0x%02X\n", sah->ae_hdr.data, op);
 	}
+	/* save potential cache stall to the end */
+	if (reply) {
+		eh = (struct ether_header *)txbuf;
+		lmacp = (uint16_t *)&eh->ether_dhost;
+		rmacp =  (uint16_t *)&state->vs_prov_mac;
+		lmacp[0] = rmacp[0];
+		lmacp[1] = rmacp[1];
+		lmacp[2] = rmacp[2];
+		rmacp =  (uint16_t *)&state->vs_ctrl_mac;
+		lmacp[3] = rmacp[0];
+		lmacp[4] = rmacp[1];
+		lmacp[5] = rmacp[2];
+		/* [6] */
+		eh->ether_type = ETHERTYPE_ARP;
+		/* [7-10] */
+		dah->ae_hdr.data = reply;
+		/* [11-13] - ar_sha */
+		lmacp[11] = rmacp[0];
+		lmacp[12] = rmacp[1];
+		lmacp[13] = rmacp[2];
+		/* [14-15] - ae_spa */
+		dah->ae_spa = hostip;
+		rmacp =  (uint16_t *)&state->vs_prov_mac;
+		/* [16-18] - ae_tha */
+		lmacp[16] = rmacp[0];
+		lmacp[17] = rmacp[1];
+		lmacp[18] = rmacp[2];
+		/* actual value of interest */
+		dah->ae_tpa = targetval;
+		return (1);
+	}
+	return (0);
 }
 
 /*

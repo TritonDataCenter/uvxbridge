@@ -229,22 +229,28 @@ struct	arphdr {
 #define ar_tpa(ap)	(((caddr_t)((ap)+1)) + 2*(ap)->ar_hln + (ap)->ar_pln)
 
 struct arphdr_ether {
-	union {
-		uint64_t data;
-		struct arphdr fields;
-	} ae_hdr;
-	uint8_t	 ae_sha[ETHER_ADDR_LEN];
-	uint32_t ae_spa;
-	uint8_t	 ae_dha[ETHER_ADDR_LEN];
-	uint32_t ae_dpa;
+    union {
+	uint64_t data;
+	struct arphdr fields;
+    } ae_hdr;
+    uint8_t	ae_sha[ETHER_ADDR_LEN];
+    uint32_t	ae_spa;
+    uint8_t	ae_tha[ETHER_ADDR_LEN];
+    uint32_t	ae_tpa;
 } __packed;
 
 
 bool nd_request(struct arphdr_ether *sae, struct arphdr_ether *dae,
-				vxstate_t &state, l2tbl_t &tbl);
-int cmd_dispatch(char *rxbuf, char *txbuf, uint16_t len, void *state, path_state_t *);
-void cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t *state,
-					  struct netmap_ring *txring, u_int *pidx);
+		vxstate_t &state, l2tbl_t &tbl);
+int cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+int cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *, void *arg);
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif
