@@ -1,5 +1,9 @@
 #ifndef DATAPATH_H_
 #define DATAPATH_H_
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 typedef enum {
 	AtoB,
 	BtoA
@@ -18,8 +22,6 @@ typedef struct {
 	struct nm_desc **da_pb; /* pointer to where to store b's nm_desc */
 } dp_args_t;
 
-
-int cmd_dispatch(char *rxbuf, char *txbuf, uint16_t len, void *state, path_state_t *);
 
 /*
  * PUBLIC - more general interface to netmap below:
@@ -48,7 +50,8 @@ typedef int (*pkt_dispatch_t)(char *txbuf, char *rxbuf, uint16_t len, void *arg,
  *
  */
 int run_datapath(dp_args_t *port_args, pkt_dispatch_t dispatch, void *arg);
-
-
+#ifdef __cplusplus
+}
+#endif
 
 #endif

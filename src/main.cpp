@@ -42,7 +42,8 @@
 
 
 #include "uvxbridge.h"
-#include "datapath.h"
+#include "uvxlan.h"
+
 
 static void
 usage(char *name)

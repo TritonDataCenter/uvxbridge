@@ -32,6 +32,7 @@
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/udp.h>
+#include "datapath.h"
 
 /*
  *   0                   1                   2                   3
@@ -241,6 +242,7 @@ struct arphdr_ether {
 
 bool nd_request(struct arphdr_ether *sae, struct arphdr_ether *dae,
 				vxstate_t &state, l2tbl_t &tbl);
+int cmd_dispatch(char *rxbuf, char *txbuf, uint16_t len, void *state, path_state_t *);
 void cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t *state,
 					  struct netmap_ring *txring, u_int *pidx);
 
