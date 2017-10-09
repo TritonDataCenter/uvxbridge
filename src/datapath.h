@@ -39,7 +39,7 @@ typedef struct {
  *     rxbuf: received packet
  *     txbuf: response packet
  *     ps: packet sizes and ring state
- *     arg: pointer to persistent state
+ *     arg: pointer to user persistent state
  * 
  *
  * A trivial example used for bridging two interfaces or echoing:
@@ -49,6 +49,20 @@ typedef struct {
  * {
  *    nm_pkt_copy(rxbuf, txbuf, ps->ps_rx_len);
  *    *(ps->ps_tx_len) = ps->ps_rx_len;
+ *    return (1);
+ * }
+ *
+ * An even more trivial example that sends back an int with the number of
+ * packets received
+ *
+ * int
+ * rx_count_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
+ * {
+ *    int *count = arg;
+ *    int *tx_count = (int *)txbuf;
+ *    *tx_count = *count;
+ *    (*count)++;
+ *    *(ps->ps_tx_len) = sizeof(int);
  *    return (1);
  * }
  *
