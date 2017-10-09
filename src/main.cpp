@@ -37,13 +37,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#define NETMAP_WITH_LIBS
-#include <net/netmap_user.h>
-
-
 #include "uvxbridge.h"
 #include "uvxlan.h"
-
 
 static void
 usage(char *name)
