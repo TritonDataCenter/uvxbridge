@@ -235,6 +235,11 @@ struct arphdr_ether {
 	uint32_t ae_dpa;
 } __packed;
 
-bool nd_request(struct arphdr_ether *sae, struct arphdr_ether *dae, vxstate_t &state, l2tbl_t &tbl);
+
+bool nd_request(struct arphdr_ether *sae, struct arphdr_ether *dae,
+				vxstate_t &state, l2tbl_t &tbl);
+void cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t &state,
+					  struct netmap_ring *txring, u_int *pidx);
+
 
 #endif

@@ -48,7 +48,8 @@ static int do_abort = 0;
 
 typedef enum tundir {
 	EGRESS,
-	INGRESS
+	INGRESS,
+	CONTROL
 } tundir_t;
 
 static void
@@ -93,7 +94,7 @@ nd_dispatch(char *rxbuf, uint16_t len, vxstate_t &state, tundir_t dir)
 	struct ether_vlan_header *evh, *evhrsp;
 	struct arphdr_ether dae, *sae;
 	int hdrlen, etype;
-	bool hit;
+	bool hit = false;
 
 	txring = vx_txring(state, dir);
 	if (__predict_false(nm_ring_space(txring) == 0))
@@ -112,9 +113,7 @@ nd_dispatch(char *rxbuf, uint16_t len, vxstate_t &state, tundir_t dir)
 		return;
 
 	sae = (struct arphdr_ether *)(rxbuf + hdrlen);
-	if (dir == EGRESS)
-		hit = nd_request(sae, &dae, state, state.vs_l2_vx);
-	else
+	if (dir == INGRESS)
 		hit = nd_request(sae, &dae, state, state.vs_l2_phys);
 	if (hit) {
 		int k = txring->cur;
@@ -136,11 +135,18 @@ nd_dispatch(char *rxbuf, uint16_t len, vxstate_t &state, tundir_t dir)
 	}
 }
 
-static bool
-pkt_dispatch(char *rxbuf, char *txbuf, uint16_t len, vxstate_t &state, tundir_t dir)
+static void
+pkt_dispatch(char *rxbuf, char *txbuf, uint16_t len, vxstate_t &state,
+			 tundir_t dir, struct netmap_ring *txring, u_int *pidx)
 {
 	struct ether_vlan_header *evh;
 	int etype;
+	bool consumed = false;
+
+	if (__predict_false(dir == CONTROL)) {
+		cmd_dispatch(rxbuf, txbuf, len, state, txring, pidx);
+		return;
+	}
 
 	evh = (struct ether_vlan_header *)(rxbuf);
 	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN))
@@ -151,11 +157,12 @@ pkt_dispatch(char *rxbuf, char *txbuf, uint16_t len, vxstate_t &state, tundir_t 
 	/* XXX we only handle ipv4 here for v0 */
 	if (__predict_false(etype == ETHERTYPE_ARP)) {
 		nd_dispatch(rxbuf, len, state, dir);
-		return false;
 	} else if (dir == INGRESS)
-		return vxlan_decap(rxbuf, txbuf, len, state);
+		consumed = vxlan_decap(rxbuf, txbuf, len, state);
 	else
-		return vxlan_encap(rxbuf, txbuf, len, state);
+		consumed = vxlan_encap(rxbuf, txbuf, len, state);
+	if (consumed)
+		*pidx = nm_ring_next(txring, *pidx);
 }
 
 /*
@@ -220,9 +227,7 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 		rxbuf = NETMAP_BUF(rxring, rs->buf_idx);
 		txbuf = NETMAP_BUF(txring, ts->buf_idx);
 		j = nm_ring_next(rxring, j);
-		/* we only need to advance the txring idx if txbuf is consumed */
-		if (pkt_dispatch(rxbuf, txbuf, ts->len, state, dir))
-			k = nm_ring_next(txring, k);
+		pkt_dispatch(rxbuf, txbuf, ts->len, state, dir, txring, &k);
 	}
 	rxring->head = rxring->cur = j;
 	txring->head = txring->cur = k;
@@ -339,8 +344,52 @@ run_datapath(vxstate_t &state)
 		if (pollfd[1].revents & POLLOUT)
 			move(pa, pb, burst, state, EGRESS);
 
-		/* We don’t need ioctl(NIOCTXSYNC) on the two file descriptors here,
+		/* We don't need ioctl(NIOCTXSYNC) on the two file descriptors here,
 		 * kernel will txsync on next poll(). */
 	}	
+	return 0;
+}
+
+int
+run_controlpath(vxstate_t &state)
+{
+	struct pollfd pollfd[1];
+	u_int burst = 1024;
+	struct nm_desc *pa = state.vs_nm_config;
+
+	/* main loop */
+	signal(SIGINT, sigint_h);
+	while (!do_abort) {
+		int n0, ret;
+		pollfd[0].events = 0;
+		pollfd[0].revents = 0;
+		n0 = pkt_queued(pa, 0);
+		if (!n0)
+			pollfd[0].events |= POLLIN;
+		pollfd[0].events |= POLLOUT;
+
+		/* poll() also cause kernel to txsync/rxsync the NICs */
+		ret = poll(pollfd, 1, 2500);
+		if (ret <= 0 || verbose)
+		    D("poll %s [0] ev %x %x rx %d@%d tx %d,",
+				ret <= 0 ? "timeout" : "ok",
+				pollfd[0].events,
+				pollfd[0].revents,
+				pkt_queued(pa, 0),
+				NETMAP_RXRING(pa->nifp, pa->cur_rx_ring)->cur,
+				pkt_queued(pa, 1)
+			);
+		if (ret < 0)
+			continue;
+		if (pollfd[0].revents & POLLERR) {
+			struct netmap_ring *rx = NETMAP_RXRING(pa->nifp, pa->cur_rx_ring);
+			D("error on fd0, rx [%d,%d,%d)",
+				rx->head, rx->cur, rx->tail);
+		}
+		if (pollfd[0].revents & POLLOUT)
+			move(pa, pa, burst, state, CONTROL);
+		/* We don't need ioctl(NIOCTXSYNC) on the file descriptor here,
+		 * kernel will txsync on next poll(). */
+	}
 	return 0;
 }

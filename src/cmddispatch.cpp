@@ -31,19 +31,19 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <net/ethernet.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#define NETMAP_WITH_LIBS
+#include <net/netmap_user.h>
+
 #include <iostream>
 #include <map>
 #include <string>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include "uvxbridge.h"
+#include "uvxlan.h"
 
-#ifdef DEBUG
-#define D printf
-#else
-#define D(...)
-#endif
-
+#ifdef old
 #define ERRENT(error) #error
 static const char *err_list[] = {
 	ERRENT(ERR_SUCCESS),
@@ -272,7 +272,7 @@ fte_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &resu
 	return 0;
  badparse:
 	err = ERR_PARSE;
- incomplete:
+  incomplete:
 	result = dflt_result(seqno, err);
 	return EINVAL;
 }
@@ -792,7 +792,7 @@ gather_args(cmdmap_t &map, char *input)
 	const char *delim = " ";
 	const char *kvdelim = ":";
 
-	while (input != NULL) {
+	while (input != NULxL) {
 		indexp = strsep(&input, delim);
 		k = strsep(&indexp, kvdelim);
 		/* badly formed K:V pair */
@@ -871,4 +871,47 @@ cmd_dispatch(int cfd, char *input, struct vxlan_state &state)
 	}
 	D("parsed %d lines\n", cnt);
 	return 0;
+}
+#endif
+
+bool
+cmd_dispatch_ip(char *rxbuf, char *txbuf, vxstate_t &state)
+{
+	abort();
+	return true;
+}
+
+void
+cmd_dispatch(char *rxbuf, char *txbuf, uint16_t len, vxstate_t &state,
+			 struct netmap_ring *txring, u_int *pidx)
+{
+	struct ether_header *eh;
+	uint64_t dmac;
+	int etype;
+
+	if (len < ETHER_HDR_LEN + sizeof(struct arphdr_ether))
+		return;
+	eh = (struct ether_header *)rxbuf;
+	etype = ntohs(eh->ether_type);
+	dmac = le64toh(*(uint64_t *)(rxbuf))& 0xffffffffffff;
+
+	/* XXX check source mac too */
+	if (dmac != state.vs_ctrl_mac) {
+		D("received control message to %lx expect %lx\n",
+		  dmac, state.vs_ctrl_mac);
+		return;
+	}
+
+	switch(etype) {
+		case ETHERTYPE_ARP:
+			cmd_dispatch_arp(rxbuf, txbuf, state, txring, pidx);
+			break;
+		case ETHERTYPE_IP:
+			if (cmd_dispatch_ip(rxbuf, txbuf, state))
+				*pidx = nm_ring_next(txring, *pidx);
+			break;
+		default:
+			/* we only support ipv4 - XXX */
+			/* UNHANDLED */;
+	}
 }

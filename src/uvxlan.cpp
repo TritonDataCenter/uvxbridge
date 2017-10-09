@@ -26,18 +26,83 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/types.h>
 #include <stdio.h>
+
+#include <net/ethernet.h>
 #define NETMAP_WITH_LIBS
 #include <net/netmap_user.h>
 #include <sys/poll.h>
 
 #include "uvxbridge.h"
 #include "uvxlan.h"
-                                /*   hrd         pro      hln  pln     op   */
-static uint8_t arpopreq_[8] =    {0x00, 0x01, 0x08, 0x00, 0x6, 0x4, 0x0, 0x1};
-static uint64_t arpopreq = (uint64_t)arpopreq_;
-static uint8_t arpopreply_[8] =  {0x00, 0x01, 0x08, 0x00, 0x6, 0x4, 0x0, 0x2};
-static uint64_t arpopreply = (uint64_t)arpopreply_;
+
+#define AE_REQUEST		0x0100040600080100UL
+#define AE_REPLY		0x0200040600080100UL
+#define AE_REVREQUEST		0x0300040600080100UL
+#define AE_REVREPLY		0x0400040600080100UL
+
+#define AE_REQUEST_ALL		0x0A00040600080100UL
+#define AE_REVREQUEST_ALL	0x0B00040600080100UL
+#define AE_VM_VXLANID_REQUEST	0x0C00040600080100UL
+#define AE_VM_VXLANID_REQUEST_ALL	0x0D00040600080100UL
+#define AE_VM_VXLANID_REPLY	0x0E00040600080100UL
+#define AE_VM_VLANID_REQUEST	0x0F00040600080100UL
+#define AE_VM_VLANID_REQUEST_ALL	0x1000040600080100UL
+#define AE_VM_VLANID_REPLY	0x1100040600080100UL
+
+
+#define A(val) printf("got %s\n", #val)
+
+void
+cmd_dispatch_arp(char *rxbuf, char *txbuf, vxstate_t &state,
+				 struct netmap_ring *txring, u_int *pidx)
+{
+	struct arphdr_ether *sah, *dah;
+
+	sah = (struct arphdr_ether *)(rxbuf + ETHER_HDR_LEN);
+	dah = (struct arphdr_ether *)(txbuf + ETHER_HDR_LEN);
+	switch (sah->ae_req) {
+		case AE_REQUEST:
+			A(AE_REQUEST);
+			break;
+		case AE_REPLY:
+			A(AE_REPLY);
+			break;
+		case AE_REVREQUEST:
+			A(AE_REVREQUEST);
+			break;
+		case AE_REVREPLY:
+			A(AE_REVREPLY);
+			break;
+		case AE_REQUEST_ALL:
+			A(AE_REQUEST_ALL);
+			break;
+		case AE_REVREQUEST_ALL:
+			A(AE_REVREQUEST_ALL);
+			break;
+		case AE_VM_VXLANID_REQUEST:
+			A(AE_VM_VXLANID_REQUEST);
+			break;
+		case AE_VM_VXLANID_REQUEST_ALL:
+			A(AE_VM_VXLANID_REQUEST_ALL);
+			break;
+		case AE_VM_VXLANID_REPLY:
+			A(AE_VM_VXLANID_REPLY);
+			break;
+		case AE_VM_VLANID_REQUEST:
+			A(AE_VM_VLANID_REQUEST);
+			break;
+		case AE_VM_VLANID_REQUEST_ALL:
+			A(AE_VM_VLANID_REQUEST);
+			break;
+		case AE_VM_VLANID_REPLY:
+			A(AE_VM_VLANID_REPLY);
+			break;
+		default:
+			printf("unrecognized value: 0x%016lX\n", sah->ae_req);
+	}
+}
 
 /*
  * If rxbuf contains a neighbor discovery request return true.
@@ -48,13 +113,14 @@ static uint64_t arpopreply = (uint64_t)arpopreply_;
 bool
 nd_request(struct arphdr_ether *sae, arphdr_ether *dae, vxstate_t &state, l2tbl_t &tbl)
 {
-
+#if 0
 //  XXX we assume prepopulated ARP table so ignore replies
 //	if (ae->ae_req != arpopreq && ae->ae_req != arpopreply)
 	if (sae->ae_req != arpopreq)
 		return false;
 
 	dae->ae_req = arpopreply;
+#endif
 	abort();
 	return true;
 }
@@ -89,7 +155,7 @@ vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 		hdrlen = ETHER_HDR_LEN;
 		etype = ntohs(evh->evl_encap_proto);
 	}
-	if (etype != ETHERTYPE_IP && etype != ETHERYTPE_IPV6)
+	if (etype != ETHERTYPE_IP && etype != ETHERTYPE_IPV6)
 		return false;
 	/* first map evh->evl_shost -> vxlanid / vlanid */
 	/* ..... */
@@ -105,6 +171,7 @@ vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 	/* calculate source port */
 	/* .... */
 
+	evhrsp = (struct ether_vlan_header *)(txbuf);
     nm_pkt_copy(rxbuf, txbuf, len);
     return true;
 }

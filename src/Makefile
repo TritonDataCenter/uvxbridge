@@ -11,11 +11,11 @@ datapath.o: datapath.cpp uvxbridge.h uvxlan.h
 uvxlan.o: uvxlan.cpp uvxbridge.h uvxlan.h
 	$(CXX) $(CFLAGS) -c uvxlan.cpp
 
-dispatch_test: main.o cmddispatch.o datapath.o uvxlan.o
-	$(CXX) main.o cmddispatch.o datapath.o uvxlan.o -o dispatch_test
+uvxbridge: main.o cmddispatch.o datapath.o uvxlan.o
+	$(CXX) main.o cmddispatch.o datapath.o uvxlan.o -o uvxbridge
 
 
-all: dispatch_test
+all: uvxbridge
 
 clean:
-	rm -f dispatch_test *.o *~
+	rm -f uvxbridge *.o *~

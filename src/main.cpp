@@ -31,104 +31,139 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <arpa/inet.h>
+#include <net/ethernet.h>
 
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
+
+#define NETMAP_WITH_LIBS
+#include <net/netmap_user.h>
+
 
 #include "uvxbridge.h"
 
 static void
-usage(void)
+usage(char *name)
 {
-	printf("usage: [-p <port>] [-f <unix socket>]\n");
-	exit(0);
+	printf("usage %s -i <ingress> -e <egress> -c <config> -m <config mac address> -p <provisioning agent mac address>", name);
+	exit(1);
 }
 
-#ifdef DEBUG
-#define D printf
-#else
-#define D(...)
-#endif
+uint64_t
+mac_parse(char *input)
+{
+	char *idx, *mac = strdup(input);
+	const char *del = ":";
+	uint8_t mac_num[8];
+	uint64_t result;
+	int i;
 
+	for (i = 0; ((idx = strsep(&mac, del)) != NULL) && i < ETHER_ADDR_LEN; i++) {
+		mac_num[i] = strtol(idx, NULL, 10);
+	}
+	free(mac);
+	if (i < ETHER_ADDR_LEN)
+		return 0;
+	result = *(uint64_t *)mac_num;
+
+	return htobe64(result);
+}
+
+
+static int
+netmap_setup(vxstate_t &state, char *ingress, char *egress, char *config)
+{
+	struct nm_desc *ni, *ne, *nc;
+
+	ni = ne = nc = NULL;
+
+	ni = nm_open(ingress, NULL, 0, NULL);
+	if (ni == NULL) {
+		D("cannot open %s", ingress);
+		return (1);
+	}
+	ne = nm_open(egress, NULL, NM_OPEN_NO_MMAP, ni);
+	if (ne == NULL) {
+		D("cannot open %s", egress);
+		return (1);
+	}
+	nc = nm_open(config, NULL, NM_OPEN_NO_MMAP, ni);
+	if (nc == NULL) {
+		D("cannot open %s", config);
+		return (1);
+	}
+	state.vs_nm_config = nc;
+	state.vs_nm_egress = ne;
+	state.vs_nm_ingress = ni;
+
+	return 0;
+}
 
 int
 main(int argc, char *const argv[])
 {
-	int ch, s, bytes, cfd;
-	long port = 0;
-	const char *file = "default";
-	struct sockaddr_un un;
-	struct sockaddr_in in;
-	struct sockaddr peer_addr;
-	socklen_t pa_size;
-	char buf[4096];
+	int ch;
+	char *ingress, *egress, *config, *log;
+	uint64_t pmac, cmac;
 	vxstate_t state;
 
-	while ((ch = getopt(argc, argv, "p:f:")) != -1) {
+	ingress = egress = config = NULL;
+	pmac = cmac = 0;
+	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:")) != -1) {
 		switch (ch) {
-			case 'p':
-				port = strtol(optarg, NULL, 10);
+			case 'i':
+				ingress = optarg;
 				break;
-			case 'f':
-				file = optarg;
+			case 'e':
+				egress = optarg;
+				break;
+			case 'c':
+				config = optarg;
+				break;
+			case 'p':
+				pmac = mac_parse(optarg);
+				break;
+			case 'm':
+				cmac = mac_parse(optarg);
+				break;
+			case 'l':
+				log = optarg;
 				break;
 			case '?':
 			default:
-				usage();
+				usage(argv[0]);
 		}
 	}
-
-	if (port == 0) {
-		if ((s = socket(PF_UNIX, SOCK_STREAM, 0)) < 0) {
-			perror("socket failed");
-			exit(1);
-		}
-		bzero(&un, sizeof(struct sockaddr_un));
-		un.sun_family = AF_UNIX;
-		strncpy(un.sun_path, file, sizeof(un.sun_path) - 1);
-		if (bind(s, (struct sockaddr *)&un, sizeof(struct sockaddr_un)) < 0) {
-			perror("bind failed");
-			exit(1);
-		}
-	} else {
-		int opt = 1;
-		pa_size = sizeof(int);
-		if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
-			perror("socket failed");
-			exit(1);
-		}
-		setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &opt, pa_size);
-		bzero(&in, sizeof(struct sockaddr_in));
-		in.sin_len = sizeof(struct sockaddr_in);
-		in.sin_family = AF_INET;
-		in.sin_port = htons(port);
-		in.sin_addr.s_addr = inet_addr("127.0.0.1");
-		if (bind(s, (struct sockaddr *)&in, sizeof(struct sockaddr_in)) < 0) {
-			perror("bind failed");
-			exit(1);
-		}
+	if (pmac == 0) {
+		printf("missing provisioning agent mac address\n");
+		usage(argv[0]);
 	}
-	if (listen(s, 1) < 0) {
-		perror("listen failed");
+	if (cmac == 0) {
+		printf("missing bridge configuration mac address\n");
+		usage(argv[0]);
+	}
+	if (ingress == NULL) {
+		printf("missing ingress netmap interface\n");
+		usage(argv[0]);
+	}
+	if (egress == NULL) {
+		printf("missing egress netmap interface\n");
+		usage(argv[0]);
+	}
+	if (config == NULL) {
+		printf("missing config netmap interface\n");
+		usage(argv[0]);
+	}
+	state.vs_prov_mac = pmac;
+	state.vs_ctrl_mac = cmac;
+	if (netmap_setup(state, ingress, egress, config)) {
+		printf("netmap setup failed - cannot continue\n");
 		exit(1);
 	}
-	bzero(buf, 4096);
-	buf[4095] = '\0';
-	while ((cfd = accept(s, (struct sockaddr *)&peer_addr, &pa_size)) >= 0) {
-		int rc;
-		D("accepted connection %d\n", cfd);
-		while (1) {
-			if ((bytes = read(cfd, buf, 4095)) < 0) {
-				close(cfd);
-				break;
-			}
-			if (bytes == 0)
-				continue;
-			D("dispatching cmd of %d bytes\n", bytes);
-			rc = cmd_dispatch(cfd, buf, state);
-			D("cmd_dispatch: %d\n", rc);
-			bzero(buf, bytes);
-		}
-	}
+	/* start datapath thread */
+	/* .... */
+
+	run_controlpath(state);
 	return 0;
 }
