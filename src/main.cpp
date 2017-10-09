@@ -42,6 +42,7 @@
 
 
 #include "uvxbridge.h"
+#include "datapath.h"
 
 static void
 usage(char *name)
@@ -106,6 +107,7 @@ main(int argc, char *const argv[])
 	uint64_t pmac, cmac;
 	vxstate_t state;
 	bool debug = false;
+	dp_args_t port_args;
 
 	ingress = egress = config = NULL;
 	pmac = cmac = 0;
@@ -165,7 +167,9 @@ main(int argc, char *const argv[])
 	}
 	/* start datapath thread */
 	/* .... */
-
-	run_datapath_priv(state.vs_nm_config, state.vs_nm_config, cmd_dispatch, &state);
+	port_args.da_pa_name = config;
+	port_args.da_pb_name = NULL;
+	port_args.da_pa = &state.vs_nm_config;
+	run_datapath(&port_args, cmd_dispatch, &state);
 	return 0;
 }

@@ -40,8 +40,11 @@
 #include <iostream>
 #include <map>
 #include <string>
+
 #include "uvxbridge.h"
 #include "uvxlan.h"
+#include "datapath.h"
+
 
 #ifdef old
 #define ERRENT(error) #error
