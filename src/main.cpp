@@ -105,7 +105,7 @@ main(int argc, char *const argv[])
 	char *ingress, *egress, *config, *log;
 	uint64_t pmac, cmac;
 	vxstate_t state;
-	bool debug;
+	bool debug = false;
 
 	ingress = egress = config = NULL;
 	pmac = cmac = 0;
