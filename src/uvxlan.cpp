@@ -53,6 +53,7 @@
 
 
 #define A(val) printf("got %s\n", #val)
+extern int debug;
 
 int
 cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
@@ -65,7 +66,7 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	uint64_t reply = 0;
 
 	len = ps->ps_rx_len;
-	if (len < ETHER_HDR_LEN + sizeof(struct arphdr_ether))
+	if (len < ETHER_HDR_LEN + sizeof(struct arphdr_ether) && debug < 2)
 		return 0;
 
 	sah = (struct arphdr_ether *)(rxbuf + ETHER_HDR_LEN);
