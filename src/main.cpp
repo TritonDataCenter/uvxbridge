@@ -40,10 +40,12 @@
 #include "uvxbridge.h"
 #include "uvxlan.h"
 
+int debug;
+
 static void
 usage(char *name)
 {
-	printf("usage %s -i <ingress> -e <egress> -c <config> -m <config mac address> -p <provisioning agent mac address> [-d]\n", name);
+	printf("usage %s -i <ingress> -e <egress> -c <config> -m <config mac address> -p <provisioning agent mac address> [-d <level>]\n", name);
 	exit(1);
 }
 
@@ -70,12 +72,11 @@ main(int argc, char *const argv[])
 	char *ingress, *egress, *config, *log;
 	uint64_t pmac, cmac;
 	vxstate_t state;
-	bool debug = false;
 	dp_args_t port_args;
 
 	ingress = egress = config = NULL;
 	pmac = cmac = 0;
-	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:d")) != -1) {
+	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:d:")) != -1) {
 		switch (ch) {
 			case 'i':
 				ingress = optarg;
@@ -96,7 +97,7 @@ main(int argc, char *const argv[])
 				log = optarg;
 				break;
 			case 'd':
-				debug = true;
+				debug = strtol(optarg, NULL, 10);
 				break;
 			case '?':
 			default:
@@ -132,6 +133,7 @@ main(int argc, char *const argv[])
 	port_args.da_pb_name = NULL;
 	port_args.da_pa = &state.vs_nm_config;
 	port_args.da_rx_dispatch = cmd_dispatch;
+	port_args.da_poll_timeout = 2500;
 	run_datapath(&port_args, &state);
 	return 0;
 }
