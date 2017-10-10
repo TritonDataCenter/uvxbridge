@@ -15,21 +15,23 @@ v0.1:
 v0.2:
 2017.10.20 - Friday
 v0.1 +
- - Jumbo frames
+ - minimal firewall support (configuration done w/ UDP + ioctl structs)
  - 1 copy on ingress / egress
 
 v0.3
 2017.10.27 - Friday
 v0.2 +
+ - ptnetmap integration 1st draft
  - smart VALE (enforces subnet IDs) works
- - minimal firewall support (configuration done w/ UDP + ioctl structs)
 
 v0.4
 2017.11.03 - Friday
 v0.3 +
- - ptnetmap integration 1st draft
+ - ptnetmap integration upstreamable
 
 v0.5
 2017.11.10 - Friday
 v0.4 +
- - ptnetmap integration upstreamable
+ - Jumbo frames
+ - additional routes / interface addresses
+
