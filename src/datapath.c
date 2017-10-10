@@ -90,35 +90,35 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 			  u_int limit, const char *msg, pkt_dispatch_t rx_dispatch,
 			  void *arg, datadir_t dir)
 {
-    u_int j, k, m = 0;
-    path_state_t ps;
+	u_int j, k, m = 0;
+	path_state_t ps;
 
-    ps.ps_tx_pidx = &k;
-    ps.ps_rx_pidx = &j;
-    ps.ps_dir = dir;
-    ps.ps_rxring = rxring;
-    ps.ps_txring = txring;
-    /* print a warning if any of the ring flags is set (e.g. NM_REINIT) */
-    if (rxring->flags || txring->flags)
+	ps.ps_tx_pidx = &k;
+	ps.ps_rx_pidx = &j;
+	ps.ps_dir = dir;
+	ps.ps_rxring = rxring;
+	ps.ps_txring = txring;
+	/* print a warning if any of the ring flags is set (e.g. NM_REINIT) */
+	if (rxring->flags || txring->flags)
 		D("%s rxflags %x txflags %x",
 		  msg, rxring->flags, txring->flags);
-    j = rxring->cur; /* RX */
-    k = txring->cur; /* TX */
-    m = nm_ring_space(rxring);
-    if (m < limit)
+	j = rxring->cur; /* RX */
+	k = txring->cur; /* TX */
+	m = nm_ring_space(rxring);
+	if (m < limit)
 		limit = m;
-    m = nm_ring_space(txring);
-    if (m < limit)
+	m = nm_ring_space(txring);
+	if (m < limit)
 		limit = m;
-    m = limit;
-    while (limit-- > 0) {
+	m = limit;
+	while (limit-- > 0) {
 		struct netmap_slot *rs = &rxring->slot[j];
 		struct netmap_slot *ts = &txring->slot[k];
 		char *rxbuf, *txbuf;
 
 		/* swap packets */
 		if (ts->buf_idx < 2 || rs->buf_idx < 2) {
-			D("wrong index rx[%d] = %d  -> tx[%d] = %d",
+			D("wrong index rx[%d] = %d	-> tx[%d] = %d",
 			  j, rs->buf_idx, k, ts->buf_idx);
 			sleep(2);
 		}
@@ -154,13 +154,13 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 		j = nm_ring_next(rxring, j);
 		if (rx_dispatch(rxbuf, txbuf, &ps, arg))
 			k = nm_ring_next(txring, k);
-    }
-    rxring->head = rxring->cur = j;
-    txring->head = txring->cur = k;
-    if (verbose && m > 0)
+	}
+	rxring->head = rxring->cur = j;
+	txring->head = txring->cur = k;
+	if (verbose && m > 0)
 		D("%s sent %d packets to %p", msg, m, (void *)txring);
 
-    return (m);
+	return (m);
 }
 
 /* move packets from src to destination */
@@ -194,42 +194,44 @@ move(struct nm_desc *src, struct nm_desc *dst, u_int limit,
 static void
 do_tx(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t tx_dispatch, void *arg)
 {
-    u_int k;
-    path_state_t ps;
-    char *txbuf;
-    struct netmap_ring *txring;
-    struct netmap_slot *ts;
+	u_int k;
+	path_state_t ps;
+	char *txbuf;
+	struct netmap_ring *txring;
+	struct netmap_slot *ts;
 
-    ps.ps_tx_pidx = &k;
-    ps.ps_rx_pidx = NULL;
-    ps.ps_rxring = NULL;
+	ps.ps_tx_pidx = &k;
+	ps.ps_rx_pidx = NULL;
+	ps.ps_rxring = NULL;
+	ps.ps_rx_len = 0;
 
-    /* transmit on port A */
-    txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
-    k = txring->cur;
-    ts = &txring->slot[k];
-    txbuf = NETMAP_BUF(txring, ts->buf_idx);
-    ps.ps_dir = AtoB;
-    ps.ps_txring = txring;
+	/* transmit on port A */
+	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
+	k = txring->cur;
+	ts = &txring->slot[k];
+	ps.ps_tx_len = &ts->len;
+	txbuf = NETMAP_BUF(txring, ts->buf_idx);
+	ps.ps_dir = AtoB;
+	ps.ps_txring = txring;
 
-    if (tx_dispatch(NULL, txbuf, &ps, arg))
+	if (tx_dispatch(NULL, txbuf, &ps, arg))
 		k = nm_ring_next(txring, k);
-    txring->head = txring->cur = k;
+	txring->head = txring->cur = k;
 
 	if (pa == pb)
 		return;
 
-    /* transmit on port B */
-    txring = NETMAP_TXRING(pb->nifp, pb->first_tx_ring);
-    k = txring->cur;
-    ts = &txring->slot[k];
-    txbuf = NETMAP_BUF(txring, ts->buf_idx);
-    ps.ps_dir = BtoA;
-    ps.ps_txring = txring;
+	/* transmit on port B */
+	txring = NETMAP_TXRING(pb->nifp, pb->first_tx_ring);
+	k = txring->cur;
+	ts = &txring->slot[k];
+	txbuf = NETMAP_BUF(txring, ts->buf_idx);
+	ps.ps_dir = BtoA;
+	ps.ps_txring = txring;
 
-    if (tx_dispatch(NULL, txbuf, &ps, arg))
+	if (tx_dispatch(NULL, txbuf, &ps, arg))
 		k = nm_ring_next(txring, k);
-    txring->head = txring->cur = k;
+	txring->head = txring->cur = k;
 }
 
 // pa = host; pb = egress
