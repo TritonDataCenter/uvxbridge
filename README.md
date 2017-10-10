@@ -34,4 +34,4 @@ v0.5
 v0.4 +
  - Jumbo frames
  - additional routes / interface addresses
-
+ - VLAN support enabled 
