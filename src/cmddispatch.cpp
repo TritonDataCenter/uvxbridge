@@ -44,7 +44,7 @@
 #include "uvxbridge.h"
 #include "uvxlan.h"
 #include "datapath.h"
-
+extern int debug;
 
 #ifdef old
 typedef int (*cmdhandler_t)(cmdmap_t &map, uint64_t seqno, vxstate_t&, string&);
@@ -593,12 +593,13 @@ cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 	dmac = le64toh(*(uint64_t *)(rxbuf))& 0xffffffffffff;
 
 	/* XXX check source mac too */
-	if (dmac != vs->vs_ctrl_mac) {
-		D("received control message to %lx expect %lx\n",
+	if (dmac != vs->vs_ctrl_mac && debug < 2) {
+		D("received control message to %lx expect %lx",
 		  dmac, vs->vs_ctrl_mac);
 		return 0;
 	}
-
+	if (debug >= 2)
+		D("DISPATCHING");
 	switch(etype) {
 		case ETHERTYPE_ARP:
 			return cmd_dispatch_arp(rxbuf, txbuf, ps, vs);
