@@ -61,9 +61,10 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	struct arphdr_ether *sah, *dah;
 	struct ether_header *eh;
 	int op, len;
-	uint32_t hostip, targetval = 0;
+	uint32_t hostip, targetpa = 0;
 	uint16_t *rmacp, *lmacp;
-	uint64_t reply = 0;
+	uint64_t targetha = 0, reply = 0;
+	l2tbl_t &tbl = state->vs_l2_phys;
 
 	len = ps->ps_rx_len;
 	if (len < ETHER_HDR_LEN + sizeof(struct arphdr_ether) && debug < 2)
@@ -76,12 +77,20 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	hostip = htobe32(0xDEADBEEF);
 
 	switch (op) {
-		case ARPOP_REQUEST:
+		case ARPOP_REQUEST: {
 			A(ARPOP_REQUEST);
-			reply = AE_REPLY;
+			auto it = tbl.l2t_v4.find(sah->ae_tpa);
+			if (it != tbl.l2t_v4.end()) {
+				reply = AE_REPLY;
+				targetpa = sah->ae_tpa;
+				targetha = it->second;
+			}
 			break;
+		}
 		case ARPOP_REPLY:
 			A(ARPOP_REPLY);
+			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
+			tbl.l2t_v4.insert(pair<uint32_t, uint64_t>(sah->ae_tpa, targetha));
 			break;
 		case ARPOP_REVREQUEST:
 			A(ARPOP_REVREQUEST);
@@ -141,13 +150,14 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 		lmacp[13] = rmacp[2];
 		/* [14-15] - ae_spa */
 		dah->ae_spa = hostip;
-		rmacp =  (uint16_t *)&state->vs_prov_mac;
+
+		rmacp = (uint16_t *)&targetha;
 		/* [16-18] - ae_tha */
 		lmacp[16] = rmacp[0];
 		lmacp[17] = rmacp[1];
 		lmacp[18] = rmacp[2];
 		/* actual value of interest */
-		dah->ae_tpa = targetval;
+		dah->ae_tpa = targetpa;
 		return (1);
 	}
 	return (0);
