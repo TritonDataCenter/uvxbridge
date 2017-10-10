@@ -235,11 +235,10 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t rx_disp
 				  pkt_dispatch_t tx_dispatch, int timeout, void *arg)
 {
     struct pollfd pollfd[2];
-    //	int ch;
     u_int burst = 1024, wait_link = 2;
 
     if (pa != pb)
-	sleep(wait_link);
+		sleep(wait_link);
 
     /* main loop */
     signal(SIGINT, sigint_h);
