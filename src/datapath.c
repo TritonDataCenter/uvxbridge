@@ -216,6 +216,9 @@ do_tx(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t tx_dispatch, void *
 		k = nm_ring_next(txring, k);
     txring->head = txring->cur = k;
 
+	if (pa == pb)
+		return;
+
     /* transmit on port B */
     txring = NETMAP_TXRING(pb->nifp, pb->first_tx_ring);
     k = txring->cur;
