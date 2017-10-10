@@ -123,6 +123,7 @@ main(int argc, char *const argv[])
 		printf("missing egress netmap interface\n");
 		usage(argv[0]);
 	}
+	bzero(&port_args, sizeof(dp_args_t));
 	state.vs_prov_mac = pmac;
 	state.vs_ctrl_mac = cmac;
 	/* start datapath thread */
@@ -130,6 +131,7 @@ main(int argc, char *const argv[])
 	port_args.da_pa_name = config;
 	port_args.da_pb_name = NULL;
 	port_args.da_pa = &state.vs_nm_config;
-	run_datapath(&port_args, cmd_dispatch, &state);
+	port_args.da_rx_dispatch = cmd_dispatch;
+	run_datapath(&port_args, &state);
 	return 0;
 }
