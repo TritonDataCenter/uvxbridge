@@ -242,8 +242,18 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t rx_disp
     struct pollfd pollfd[2];
     u_int burst = 1024, wait_link = 2;
 
-    if (pa != pb)
+	/* setup poll(2) array */
+	memset(pollfd, 0, sizeof(pollfd));
+	pollfd[0].fd = pa->fd;
+	pollfd[1].fd = pb->fd;
+
+	if (pa != pb) {
+		D("Wait %d secs for link to come up...", wait_link);
 		sleep(wait_link);
+	}
+	D("Ready to go, %s 0x%x/%d <-> %s 0x%x/%d.",
+		pa->req.nr_name, pa->first_rx_ring, pa->req.nr_rx_rings,
+		pb->req.nr_name, pb->first_rx_ring, pb->req.nr_rx_rings);
 
     /* main loop */
     signal(SIGINT, sigint_h);
@@ -251,7 +261,7 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t rx_disp
 		u_int n0, n1;
 		int ret;
 
-		if (tx_dispatch != noop_dispatch)
+		if (tx_dispatch != NULL)
 			do_tx(pa, pb, tx_dispatch, arg);
 		pollfd[0].events = pollfd[1].events = 0;
 		pollfd[0].revents = pollfd[1].revents = 0;
@@ -332,12 +342,10 @@ run_datapath(dp_args_t *port_args, void *arg)
     struct nm_desc *pa, *pb;
     char *pa_name, *pb_name;
 	pkt_dispatch_t rx_dispatch = noop_dispatch;
-	pkt_dispatch_t tx_dispatch = noop_dispatch;
+	pkt_dispatch_t tx_dispatch = port_args->da_tx_dispatch;
 
 	if (port_args->da_rx_dispatch != NULL)
 		rx_dispatch = port_args->da_rx_dispatch;
-	if (port_args->da_tx_dispatch != NULL)
-		tx_dispatch = port_args->da_tx_dispatch;
 
     pa_name = port_args->da_pa_name;
     pb_name = port_args->da_pb_name;
