@@ -6,10 +6,11 @@ typedef enum {
 	BtoA
 } datadir_t;
 
+
 typedef struct {
 	uint16_t *ps_tx_len;
 	uint16_t ps_rx_len;
-	uint16_t ps_pad0;
+	uint16_t ps_flags;
 	datadir_t ps_dir;
 
 	/* only needed when consuming or sending more than one buffer */
@@ -66,6 +67,7 @@ extern "C" {
  */
 typedef int (*pkt_dispatch_t)(char *rxbuf, char *txbuf, path_state_t *ps, void *arg);
 
+#define DA_DEBUG 0x1
 typedef struct {
 	char *da_pa_name; /* name of the first netmap port */
 	char *da_pb_name; /* optional name of the second netmap port */
@@ -74,7 +76,7 @@ typedef struct {
 	pkt_dispatch_t da_rx_dispatch; /* dispatch handler for rx */
 	pkt_dispatch_t da_tx_dispatch; /* dispatch handler for tx -- client operation */
     int da_poll_timeout; /* poll timeout interval in ms */
-	int pad;
+	int da_flags;
 } dp_args_t;
 
 /*

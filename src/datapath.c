@@ -346,6 +346,8 @@ run_datapath(dp_args_t *port_args, void *arg)
 
 	if (port_args->da_rx_dispatch != NULL)
 		rx_dispatch = port_args->da_rx_dispatch;
+	if (port_args->da_flags & DA_DEBUG)
+		verbose = 1;
 
     pa_name = port_args->da_pa_name;
     pb_name = port_args->da_pb_name;
