@@ -64,7 +64,8 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	uint32_t hostip, targetpa = 0;
 	uint16_t *rmacp, *lmacp;
 	uint64_t targetha = 0, reply = 0;
-	l2tbl_t &tbl = state->vs_l2_phys;
+	l2tbl_t &l2tbl = state->vs_l2_phys;
+	ftable_t &ftable = state->vs_ftable;
 
 	len = ps->ps_rx_len;
 	if (len < ETHER_HDR_LEN + sizeof(struct arphdr_ether) && debug < 2)
@@ -79,8 +80,8 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	switch (op) {
 		case ARPOP_REQUEST: {
 			A(ARPOP_REQUEST);
-			auto it = tbl.l2t_v4.find(sah->ae_tpa);
-			if (it != tbl.l2t_v4.end()) {
+			auto it = l2tbl.l2t_v4.find(sah->ae_tpa);
+			if (it != l2tbl.l2t_v4.end()) {
 				reply = AE_REPLY;
 				targetpa = sah->ae_tpa;
 				targetha = it->second;
@@ -90,15 +91,34 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 		case ARPOP_REPLY:
 			A(ARPOP_REPLY);
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
-			tbl.l2t_v4.insert(pair<uint32_t, uint64_t>(sah->ae_tpa, targetha));
+			if (targetha == 0)
+				l2tbl.l2t_v4.erase(sah->ae_tpa);
+			else
+				l2tbl.l2t_v4.insert(pair<uint32_t, uint64_t>(sah->ae_tpa, targetha));
 			break;
-		case ARPOP_REVREQUEST:
+		case ARPOP_REVREQUEST: {
+			/* ipv4 forwarding table lookup */
 			A(ARPOP_REVREQUEST);
-			reply = AE_REVREPLY;
+			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
+			auto it = ftable.find(targetha);
+			if (it != ftable.end() && it->second.vfe_v6 == 0) {
+				reply = AE_REVREPLY;
+				targetpa = it->second.vfe_raddr.in4.s_addr;
+			}
 			break;
-		case ARPOP_REVREPLY:
+		}
+		case ARPOP_REVREPLY: {
 			A(ARPOP_REVREPLY);
+			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
+			if (sah->ae_tpa == 0)
+				ftable.erase(targetha);
+			else {
+				vfe_t vfe;
+				vfe.vfe_raddr.in4.s_addr = sah->ae_tpa;
+				ftable.insert(fwdent(targetha, vfe));
+			}
 			break;
+		}
 		case ARPOP_REQUEST_ALL:
 			A(ARPOP_REQUEST_ALL);
 			break;
