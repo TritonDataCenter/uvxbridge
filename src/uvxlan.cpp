@@ -66,6 +66,7 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	uint64_t targetha = 0, reply = 0;
 	l2tbl_t &l2tbl = state->vs_l2_phys;
 	ftable_t &ftable = state->vs_ftable;
+	mac_vni_map_t &vnitbl = state->vs_vni_table.mac2vni;
 
 	len = ps->ps_rx_len;
 	if (len < ETHER_HDR_LEN + sizeof(struct arphdr_ether) && debug < 2)
@@ -108,6 +109,7 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 			break;
 		}
 		case ARPOP_REVREPLY: {
+			/* ipv4 forwarding table update */
 			A(ARPOP_REVREPLY);
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
 			if (sah->ae_tpa == 0)
@@ -125,25 +127,71 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 		case ARPOP_REVREQUEST_ALL:
 			A(ARPOP_REVREQUEST_ALL);
 			break;
-		case ARPOP_VM_VXLANID_REQUEST:
+		case ARPOP_VM_VXLANID_REQUEST: {
 			A(ARPOP_VM_VXLANID_REQUEST);
-			reply = AE_VM_VXLANID_REPLY;
+			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
+			auto it = vnitbl.find(targetha);
+			if (it != vnitbl.end()) {
+				vnient_t ent;
+
+				reply = AE_VM_VXLANID_REPLY;
+				ent.data = it->second;
+				targetpa = ent.fields.vxlanid;
+			}
 			break;
+		}
 		case ARPOP_VM_VXLANID_REQUEST_ALL:
 			A(ARPOP_VM_VXLANID_REQUEST_ALL);
 			break;
 		case ARPOP_VM_VXLANID_REPLY:
 			A(ARPOP_VM_VXLANID_REPLY);
+			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
+			if (sah->ae_tpa == 0)
+				vnitbl.erase(targetha);
+			else {
+				vnient_t ent;
+				auto it = vnitbl.find(targetha);
+
+				if (it != vnitbl.end())
+					ent.data = it->second;
+				else
+					ent.data = 0;
+				ent.fields.vxlanid = sah->ae_tpa;
+				vnitbl.insert(u64pair(targetha, ent.data));
+			}
 			break;
-		case ARPOP_VM_VLANID_REQUEST:
+		case ARPOP_VM_VLANID_REQUEST: {
 			A(ARPOP_VM_VLANID_REQUEST);
-			reply = AE_VM_VLANID_REPLY;
+			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
+			auto it = vnitbl.find(targetha);
+			if (it != vnitbl.end()) {
+				vnient_t ent;
+
+				reply = AE_VM_VLANID_REPLY;
+				ent.data = it->second;
+				targetpa = ent.fields.vlanid;
+			}
 			break;
+		}
 		case ARPOP_VM_VLANID_REQUEST_ALL:
-			A(ARPOP_VM_VLANID_REQUEST);
+			A(ARPOP_VM_VLANID_REQUEST_ALL);
 			break;
 		case ARPOP_VM_VLANID_REPLY:
 			A(ARPOP_VM_VLANID_REPLY);
+			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
+			if (sah->ae_tpa == 0)
+				vnitbl.erase(targetha);
+			else {
+				vnient_t ent;
+				auto it = vnitbl.find(targetha);
+
+				if (it != vnitbl.end())
+					ent.data = it->second;
+				else
+					ent.data = 0;
+				ent.fields.vlanid = sah->ae_tpa;
+				vnitbl.insert(u64pair(targetha, ent.data));
+			}
 			break;
 		default:
 			printf("unrecognized value data: 0x%016lX op: 0x%02X\n", sah->ae_hdr.data, op);
@@ -182,7 +230,7 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	}
 	return (0);
 }
-
+#ifdef notyet
 /*
  * If rxbuf contains a neighbor discovery request return true.
  * If it's an nd request we can handle, enqueue a response.
@@ -215,7 +263,7 @@ vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 	nm_pkt_copy(rxbuf, txbuf, len);
 	return true;
 }
-
+#endif
 /*
  * If valid, encapsulate rxbuf in to txbuf
  *
