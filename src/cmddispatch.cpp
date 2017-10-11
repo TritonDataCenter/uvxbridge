@@ -289,13 +289,6 @@ route_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &r
 
 #endif
 
-bool
-cmd_dispatch_ip(char *rxbuf, char *txbuf, vxstate_t *state)
-{
-	abort();
-	return true;
-}
-
 int
 cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 {
@@ -321,7 +314,7 @@ cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 			return cmd_dispatch_arp(rxbuf, txbuf, ps, vs);
 			break;
 		case ETHERTYPE_IP:
-			if (cmd_dispatch_ip(rxbuf, txbuf, vs))
+			if (cmd_dispatch_ip(rxbuf, txbuf, ps, vs))
 				return 1;
 			break;
 		default:

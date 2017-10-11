@@ -230,8 +230,8 @@ struct	arphdr {
 
 struct arphdr_ether {
     union {
-	uint64_t data;
-	struct arphdr fields;
+		uint64_t data;
+		struct arphdr fields;
     } ae_hdr;
     uint8_t	ae_sha[ETHER_ADDR_LEN];
     uint32_t	ae_spa;
@@ -243,6 +243,7 @@ struct arphdr_ether {
 bool nd_request(struct arphdr_ether *sae, struct arphdr_ether *dae,
 		vxstate_t &state, l2tbl_t &tbl);
 int cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
+int cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
 
 #ifdef __cplusplus
 extern "C" {

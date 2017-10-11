@@ -226,10 +226,20 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 		lmacp[18] = rmacp[2];
 		/* actual value of interest */
 		dah->ae_tpa = targetpa;
+		*(ps->ps_tx_len) = 60;
 		return (1);
 	}
 	return (0);
 }
+
+int
+cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
+{
+	abort();
+	return 0;
+}
+
+
 #ifdef notyet
 /*
  * If rxbuf contains a neighbor discovery request return true.
