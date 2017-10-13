@@ -277,18 +277,21 @@ udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
 }
 
 static void
-bootp_fill(struct bootp *bp)
+dhcp_fill(struct bootp *bp)
 {
+	uint32_t *vendp;
 	bzero(bp, sizeof(*bp));
 	bp->bp_op = BOOTREQUEST;
 	bp->bp_htype = HTYPE_ETHERNET;
 	bp->bp_hlen = ETHER_ADDR_LEN;
 	bp->bp_hops = 0;
 	bp->bp_xid = htonl(42); /* magic number :) */
+	vendp = (uint32_t *)bp->bp_vend;
+	*vendp = htonl(BP_FIXED);
 }
 
 int
-cmd_send_bootp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *state)
+cmd_send_dhcp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
 	struct ether_header *eh = (struct ether_header *)txbuf;
 	struct ip *ip = (struct ip *)(eh + 1);
@@ -299,7 +302,7 @@ cmd_send_bootp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *s
 	/* source IP unknown, dest broadcast IP */
 	ip_fill(ip, 0, 0xffffffff, sizeof(*bp) + sizeof(*uh) + sizeof(*ip), IPPROTO_UDP);
 	udp_fill(uh, IPPORT_BOOTPC, IPPORT_BOOTPS, sizeof(*bp));
-	bootp_fill(bp);
+	dhcp_fill(bp);
 	*(ps->ps_tx_len) = BP_MSG_OVERHEAD + sizeof(*bp);
 	return (1);
 }

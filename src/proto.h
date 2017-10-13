@@ -21,9 +21,13 @@ struct bootp {
     struct in_addr   bp_yiaddr;			/* 'your' IP address */
     struct in_addr   bp_siaddr;			/* server IP address */
     struct in_addr   bp_giaddr;			/* gateway IP address */
+	/* 28 */
     unsigned char    bp_chaddr[BP_CHADDR_LEN];	/* client hardware address */
+	/* 44 */
     char	     bp_sname[BP_SNAME_LEN];	/* server host name */
+	/* 108 */
     char	     bp_file[BP_FILE_LEN];	/* boot file name */
+	/* 236 */
     unsigned char    bp_vend[BP_VEND_LEN];	/* vendor-specific area */
     /* note that bp_vend can be longer, extending to end of packet. */
 };
@@ -47,6 +51,8 @@ struct bootp {
 #define HTYPE_CHAOS               5
 #define HTYPE_IEEE802             6
 #define HTYPE_ARCNET              7
+
+#define BP_FIXED				0x63825363
 
 
 #define	IPPORT_STATPS			665 /* Sun DR */

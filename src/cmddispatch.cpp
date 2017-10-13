@@ -225,7 +225,7 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 	if (rte->ri_flags & RI_VALID)
 		cmd_send_heartbeat(rxbuf, txbuf, ps, state);
 	else
-		cmd_send_bootp(rxbuf, txbuf, ps, state);
+		cmd_send_dhcp(rxbuf, txbuf, ps, state);
 
 	return (1);
 }
