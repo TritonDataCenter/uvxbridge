@@ -300,6 +300,7 @@ cmd_send_bootp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *s
 	ip_fill(ip, 0, 0xffffffff, sizeof(*bp) + sizeof(*uh) + sizeof(*ip), IPPROTO_UDP);
 	udp_fill(uh, IPPORT_BOOTPC, IPPORT_BOOTPS, sizeof(*bp));
 	bootp_fill(bp);
+	*(ps->ps_tx_len) = BP_MSG_OVERHEAD + sizeof(*bp);
 	return (1);
 }
 
@@ -323,6 +324,7 @@ cmd_send_heartbeat(char *rxbuf __unused, char *txbuf, path_state_t *ps,
 	ip_fill(ip, 0, 0xffffffff, sizeof(*stat) + sizeof(*uh) + sizeof(*ip), IPPROTO_UDP);
 	udp_fill(uh, IPPORT_STATPC, IPPORT_STATPS, sizeof(*stat));
 	uvxstat_fill(stat, state);
+	*(ps->ps_tx_len) = BP_MSG_OVERHEAD + sizeof(*stat);
 	return (1);
 }
 
