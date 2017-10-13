@@ -36,6 +36,7 @@
 
 #include "uvxbridge.h"
 #include "uvxlan.h"
+#include "proto.h"
 
 #define AE_REQUEST		0x0100040600080100UL
 #define AE_REPLY		0x0200040600080100UL
@@ -232,11 +233,87 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	return (0);
 }
 
-int
-cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
+static __inline void
+eh_fill(struct ether_header *eh, uint64_t smac, uint64_t dmac, uint16_t type)
 {
-	abort();
-	return 0;
+	uint16_t *d, *s;
+
+	d = (uint16_t *)eh; /* ether_dhost */
+	s = (uint16_t *)&dmac;
+	d[0] = s[0];
+	d[1] = s[1];
+	d[2] = s[2];
+	s = (uint16_t *)&smac;
+	d[3] = s[0];
+	d[4] = s[1];
+	d[5] = s[2];
+	eh->ether_type = type;
+}
+
+static void
+ip_fill(struct ip *ip, uint32_t sip, uint32_t dip, uint16_t len)
+{
+
+
+}
+
+static void
+udp_fill(struct ip *ip, uint16_t sport, uint16_t dport, uint16_t len, uint16_t csum)
+{
+
+
+}
+
+
+
+int
+cmd_send_bootp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *state)
+{
+	struct ether_header *eh = (struct ether_header *)txbuf;
+	struct ip *ip = (struct ip *)(eh + 1);
+	struct udphdr *uh = (struct udphdr *)((caddr_t)ip + (ip->ip_hl << 2));
+	struct bootp *bp = (struct bootp *)(uh + 1);
+	int len = 0; /* XXX */
+
+	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
+	/* source IP unknown, dest broadcast IP */
+	ip_fill(ip, 0, 0xffffffff, len);
+	//udp_fill()
+
+	return (1);
+}
+
+int
+cmd_dispatch_bp(struct bootp *bp, vxstate_t *state)
+{
+	rte_t *rte = &state->vs_dflt_rte;
+	/* Validate BOOTP header */
+	/* .... */
+	/* we only care about our interface address and the gateway address */
+	rte->ri_prefixlen = 24;
+	rte->ri_mask.in4.s_addr = htobe32(0xffffff00);
+	rte->ri_laddr.in4.s_addr = bp->bp_ciaddr.s_addr;
+	rte->ri_raddr.in4.s_addr = bp->bp_giaddr.s_addr;
+	rte->ri_flags = RI_VALID;
+	return (1);
+}
+
+int
+cmd_dispatch_ip(char *rxbuf, char *txbuf __unused, path_state_t *ps, vxstate_t *state)
+{
+	struct ip *ip = (struct ip *)(rxbuf + ETHER_HDR_LEN);
+	struct udphdr *uh = (struct udphdr *)((caddr_t)ip + (ip->ip_hl << 2));
+	struct bootp *bp = (struct bootp *)(uh + 1);
+	/* validate ip header */
+
+	/* validate the UDP header */
+
+
+	/* we're only supporting a BOOTP response for the moment */
+	if (ps->ps_rx_len < sizeof(*bp) + BP_MSG_OVERHEAD)
+		return 0;
+
+	return cmd_dispatch_bp(bp, state);
 }
 
 
