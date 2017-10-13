@@ -277,14 +277,20 @@ udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
 }
 
 static void
-dhcp_fill(struct dhcp *bp)
+dhcp_fill(struct dhcp *bp, vxstate_t *state)
 {
+	uint16_t *dstp, *srcp;
 	bzero(bp, sizeof(*bp));
 	bp->bp_op = BOOTREQUEST;
 	bp->bp_htype = HTYPE_ETHERNET;
 	bp->bp_hlen = ETHER_ADDR_LEN;
 	bp->bp_hops = 0;
 	bp->bp_xid = htonl(42); /* magic number :) */
+	srcp = (uint16_t *)&state->vs_ctrl_mac;
+	dstp = (uint16_t *)&bp->bp_chaddr;
+	dstp[0] = srcp[0];
+	dstp[1] = srcp[1];
+	dstp[2] = srcp[2];
 	bp->bp_vendid = htonl(BP_FIXED);
 }
 
@@ -300,7 +306,7 @@ cmd_send_dhcp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *st
 	/* source IP unknown, dest broadcast IP */
 	ip_fill(ip, 0, 0xffffffff, sizeof(*bp) + sizeof(*uh) + sizeof(*ip), IPPROTO_UDP);
 	udp_fill(uh, IPPORT_BOOTPC, IPPORT_BOOTPS, sizeof(*bp));
-	dhcp_fill(bp);
+	dhcp_fill(bp, state);
 	*(ps->ps_tx_len) = BP_MSG_OVERHEAD + sizeof(*bp);
 	return (1);
 }
