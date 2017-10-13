@@ -109,7 +109,19 @@ typedef struct routeinfo {
 typedef pair<uint64_t, vfe_t> fwdent;
 typedef map<uint64_t, vfe_t> ftable_t;
 
+struct uvxstat {
+	uint64_t uvx_egress_rx_pkt;
+	uint64_t uvx_egress_tx_pkt;
+	uint64_t uvx_ingress_rx_pkt;
+	uint64_t uvx_ingress_tx_pkt;
+	uint64_t uvx_egress_rx_bytes;
+	uint64_t uvx_egress_tx_bytes;
+	uint64_t uvx_ingress_tx_bytes;
+	uint64_t uvx_ingress_tx_bytes;
+};
+
 typedef struct vxlan_state {
+	struct timeval vs_tlast;
 	/* mac address for peer control interface */
 	uint64_t vs_prov_mac;
 	/* mac address for host control interface */
@@ -133,6 +145,8 @@ typedef struct vxlan_state {
 	/* default route */
 	rte_t vs_dflt_rte;
 
+	/* statistics */
+	struct uvxstat vs_stats;
 } vxstate_t;
 
 #endif

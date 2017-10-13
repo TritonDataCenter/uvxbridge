@@ -211,5 +211,17 @@ cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 int
 cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 {
+	rte_t *rte = &state->vs_dflt_rte;
+	struct timeval tnow, delta;
+
+	gettimeofday(&tnow, NULL);
+	timersub(&tnow, &state->vs_tlast, &delta);
+	if (delta.tv_sec < 1)
+		return (0);
+	if (rte->ri_flags & RI_VALID)
+		cmd_send_heartbeat(rxbuf, txbuf, ps, state);
+	else
+		cmd_send_bootp(rxbuf, txbuf, ps, state);
+
 	return 0;
 }

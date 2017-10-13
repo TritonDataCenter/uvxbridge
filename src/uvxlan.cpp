@@ -247,39 +247,84 @@ eh_fill(struct ether_header *eh, uint64_t smac, uint64_t dmac, uint16_t type)
 	d[3] = s[0];
 	d[4] = s[1];
 	d[5] = s[2];
-	eh->ether_type = type;
+	eh->ether_type = htons(type);
 }
 
 static void
-ip_fill(struct ip *ip, uint32_t sip, uint32_t dip, uint16_t len)
+ip_fill(struct ip *ip, uint32_t sip, uint32_t dip, uint16_t len, uint8_t proto)
 {
-
-
+	ip->ip_v = 4;
+	ip->ip_hl = 4;
+	ip->ip_tos = 0;
+	ip->ip_len = htons(len);
+	ip->ip_id = 0;
+	ip->ip_off = htons(IP_DF);
+	ip->ip_ttl = 1;
+	ip->ip_p = proto;
+	ip->ip_sum = 0; /* XXX */
+	/* these should always be kept in network byte order (BE) */
+	ip->ip_src.s_addr = sip;
+	ip->ip_dst.s_addr = dip;
 }
 
 static void
-udp_fill(struct ip *ip, uint16_t sport, uint16_t dport, uint16_t len, uint16_t csum)
+udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
 {
-
-
+	uh->uh_sport = htons(sport);
+	uh->uh_dport = htons(dport);
+	uh->uh_ulen = htons(len + sizeof(*uh));
+	uh->uh_sum = 0; /* XXX */
 }
 
-
+static void
+bp_fill(struct bootp *bp)
+{
+	bzero(bp, sizeof(*bp));
+	bp->bp_op = BOOTREQUEST;
+	bp->bp_htype = HTYPE_ETHERNET;
+	bp->bp_hlen = ETHER_ADDR_LEN;
+	bp->bp_hops = 0;
+	bp->bp_xid = htonl(42); /* magic number :) */
+}
 
 int
 cmd_send_bootp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
 	struct ether_header *eh = (struct ether_header *)txbuf;
 	struct ip *ip = (struct ip *)(eh + 1);
-	struct udphdr *uh = (struct udphdr *)((caddr_t)ip + (ip->ip_hl << 2));
+	struct udphdr *uh = (struct udphdr *)(ip + 1);
 	struct bootp *bp = (struct bootp *)(uh + 1);
 	int len = 0; /* XXX */
 
 	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
 	/* source IP unknown, dest broadcast IP */
-	ip_fill(ip, 0, 0xffffffff, len);
-	//udp_fill()
+	ip_fill(ip, 0, 0xffffffff, sizeof(*bp) + sizeof(*uh) + sizeof(*ip));
+	udp_fill(uh, IPPORT_BOOTPC, IPPORT_BOOTPS, sizeof(*bp));
+	bootp_fill(bp);
+	return (1);
+}
 
+static void
+uvxstat_fill(struct uvxstat *stat, vxstate_t *state)
+{
+	memcpy(stat, &state->vs_stats, sizeof(*stat));
+}
+
+int
+cmd_send_heartbeat(char *rxbuf __unused, char *txbuf, path_state_t *ps,
+				   vxstate_t *state)
+{
+	struct ether_header *eh = (struct ether_header *)txbuf;
+	struct ip *ip = (struct ip *)(eh + 1);
+	struct udphdr *uh = (struct udphdr *)(ip + 1);
+	struct uvxstat *stat = (struct uvxstat *)(uh + 1);
+	int len = 0; /* XXX */
+
+	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
+	/* source IP unknown, dest broadcast IP */
+	ip_fill(ip, 0, 0xffffffff, sizeof(*bp) + sizeof(*uh) + sizeof(*ip));
+	udp_fill(uh, IPPORT_STATPC, IPPORT_STATPS, sizeof(*stat));
+	uvxstat_fill(stat, state);
 	return (1);
 }
 
