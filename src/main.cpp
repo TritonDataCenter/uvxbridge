@@ -134,7 +134,7 @@ main(int argc, char *const argv[])
 	port_args.da_pa = &state.vs_nm_config;
 	port_args.da_rx_dispatch = cmd_dispatch;
 	port_args.da_tx_dispatch = cmd_initiate;
-	port_args.da_poll_timeout = 2500;
+	port_args.da_poll_timeout = 1000;
 	run_datapath(&port_args, &state);
 	return 0;
 }

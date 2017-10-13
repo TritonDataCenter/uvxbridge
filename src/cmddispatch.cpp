@@ -219,6 +219,9 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 	timersub(&tnow, &state->vs_tlast, &delta);
 	if (delta.tv_sec < 1)
 		return (0);
+	state->vs_tlast.tv_sec = tnow.tv_sec;
+	state->vs_tlast.tv_usec = tnow.tv_usec;
+
 	if (rte->ri_flags & RI_VALID)
 		cmd_send_heartbeat(rxbuf, txbuf, ps, state);
 	else
