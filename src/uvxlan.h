@@ -245,6 +245,12 @@ bool nd_request(struct arphdr_ether *sae, struct arphdr_ether *dae,
 int cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
 int cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
 
+int cmd_send_bootp(char *rxbuf __unused, char *txbuf, path_state_t *ps,
+				   vxstate_t *state);
+int cmd_send_heartbeat(char *rxbuf __unused, char *txbuf, path_state_t *ps,
+					   vxstate_t *state);
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif

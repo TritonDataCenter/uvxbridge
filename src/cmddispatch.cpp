@@ -209,8 +209,9 @@ cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 }
 
 int
-cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
+cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 {
+	vxstate_t *state = (vxstate_t *)arg;
 	rte_t *rte = &state->vs_dflt_rte;
 	struct timeval tnow, delta;
 

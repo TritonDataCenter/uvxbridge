@@ -116,7 +116,7 @@ struct uvxstat {
 	uint64_t uvx_ingress_tx_pkt;
 	uint64_t uvx_egress_rx_bytes;
 	uint64_t uvx_egress_tx_bytes;
-	uint64_t uvx_ingress_tx_bytes;
+	uint64_t uvx_ingress_rx_bytes;
 	uint64_t uvx_ingress_tx_bytes;
 };
 

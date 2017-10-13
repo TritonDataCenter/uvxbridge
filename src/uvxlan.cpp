@@ -277,7 +277,7 @@ udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
 }
 
 static void
-bp_fill(struct bootp *bp)
+bootp_fill(struct bootp *bp)
 {
 	bzero(bp, sizeof(*bp));
 	bp->bp_op = BOOTREQUEST;
@@ -294,11 +294,10 @@ cmd_send_bootp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *s
 	struct ip *ip = (struct ip *)(eh + 1);
 	struct udphdr *uh = (struct udphdr *)(ip + 1);
 	struct bootp *bp = (struct bootp *)(uh + 1);
-	int len = 0; /* XXX */
 
 	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
 	/* source IP unknown, dest broadcast IP */
-	ip_fill(ip, 0, 0xffffffff, sizeof(*bp) + sizeof(*uh) + sizeof(*ip));
+	ip_fill(ip, 0, 0xffffffff, sizeof(*bp) + sizeof(*uh) + sizeof(*ip), IPPROTO_UDP);
 	udp_fill(uh, IPPORT_BOOTPC, IPPORT_BOOTPS, sizeof(*bp));
 	bootp_fill(bp);
 	return (1);
@@ -318,11 +317,10 @@ cmd_send_heartbeat(char *rxbuf __unused, char *txbuf, path_state_t *ps,
 	struct ip *ip = (struct ip *)(eh + 1);
 	struct udphdr *uh = (struct udphdr *)(ip + 1);
 	struct uvxstat *stat = (struct uvxstat *)(uh + 1);
-	int len = 0; /* XXX */
 
 	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
 	/* source IP unknown, dest broadcast IP */
-	ip_fill(ip, 0, 0xffffffff, sizeof(*bp) + sizeof(*uh) + sizeof(*ip));
+	ip_fill(ip, 0, 0xffffffff, sizeof(*stat) + sizeof(*uh) + sizeof(*ip), IPPROTO_UDP);
 	udp_fill(uh, IPPORT_STATPC, IPPORT_STATPS, sizeof(*stat));
 	uvxstat_fill(stat, state);
 	return (1);
