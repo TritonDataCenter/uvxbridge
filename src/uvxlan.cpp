@@ -277,17 +277,15 @@ udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
 }
 
 static void
-dhcp_fill(struct bootp *bp)
+dhcp_fill(struct dhcp *bp)
 {
-	uint32_t *vendp;
 	bzero(bp, sizeof(*bp));
 	bp->bp_op = BOOTREQUEST;
 	bp->bp_htype = HTYPE_ETHERNET;
 	bp->bp_hlen = ETHER_ADDR_LEN;
 	bp->bp_hops = 0;
 	bp->bp_xid = htonl(42); /* magic number :) */
-	vendp = (uint32_t *)bp->bp_vend;
-	*vendp = htonl(BP_FIXED);
+	bp->bp_vendid = htonl(BP_FIXED);
 }
 
 int
@@ -296,7 +294,7 @@ cmd_send_dhcp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *st
 	struct ether_header *eh = (struct ether_header *)txbuf;
 	struct ip *ip = (struct ip *)(eh + 1);
 	struct udphdr *uh = (struct udphdr *)(ip + 1);
-	struct bootp *bp = (struct bootp *)(uh + 1);
+	struct dhcp *bp = (struct dhcp *)(uh + 1);
 
 	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
 	/* source IP unknown, dest broadcast IP */
@@ -332,7 +330,7 @@ cmd_send_heartbeat(char *rxbuf __unused, char *txbuf, path_state_t *ps,
 }
 
 int
-cmd_dispatch_bp(struct bootp *bp, vxstate_t *state)
+cmd_dispatch_bp(struct dhcp *bp, vxstate_t *state)
 {
 	rte_t *rte = &state->vs_dflt_rte;
 	/* Validate BOOTP header */
@@ -351,7 +349,7 @@ cmd_dispatch_ip(char *rxbuf, char *txbuf __unused, path_state_t *ps, vxstate_t *
 {
 	struct ip *ip = (struct ip *)(rxbuf + ETHER_HDR_LEN);
 	struct udphdr *uh = (struct udphdr *)((caddr_t)ip + (ip->ip_hl << 2));
-	struct bootp *bp = (struct bootp *)(uh + 1);
+	struct dhcp *bp = (struct dhcp *)(uh + 1);
 	/* validate ip header */
 
 	/* validate the UDP header */
