@@ -227,5 +227,5 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 	else
 		cmd_send_bootp(rxbuf, txbuf, ps, state);
 
-	return 0;
+	return (1);
 }
