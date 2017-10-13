@@ -47,53 +47,6 @@
 extern int debug;
 
 #ifdef old
-typedef int (*cmdhandler_t)(cmdmap_t &map, uint64_t seqno, vxstate_t&, string&);
-
-struct result_map {
-	cmdmap_t map;
-	void insert(const char *key, uint64_t value);
-	void insert(const char *key, char *value);
-	string to_str();
-	void clear();
-};
-
-string
-result_map::to_str()
-{
-	cmdmap_t &map = this->map;
-	string result = string("( ");
-	char buf[64];
-	for (auto it = map.begin(); it != map.end(); it++) {
-		if (it->second.tag == TAG_NUMERIC)
-			snprintf(buf, 64, "(%s 0x%lX) ", it->first.c_str(),
-					 it->second.value.numeric);
-		else
-			snprintf(buf, 64, "(%s \"%s\") ", it->first.c_str(),
-					 it->second.value.text);
-		result.append(buf);
-	}
-	result.append(")");
-	return result;
-}
-
-void
-result_map::insert(const char *key, uint64_t value)
-{
-	this->map.insert(cmdent(string(key), parse_value(value)));
-}
-
-void
-result_map::insert(const char *key, char *value)
-{
-	this->map.insert(cmdent(string(key), parse_value(value)));
-}
-
-void
-result_map::clear()
-{
-	this->map.clear();
-}
-
 static int
 fte_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
 {
@@ -144,12 +97,6 @@ nd_get_all_handler(cmdmap_t &map, uint64_t seqno, l2tbl_t &tbl, string &result)
 	}
 	result = gen_result(seqno, ERR_SUCCESS, tmp);
 	return 0;
-}
-
-static int
-nd_phys_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
-{
-	return nd_get_all_handler(map, seqno, state.vs_l2_phys, result);
 }
 
 static uint32_t
@@ -224,69 +171,6 @@ route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &re
 	return EINVAL;
 }
 
-static int
-route_remove_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
-{
-	char *ip;
-	bool v6, found = false;
-	int domain;
-	rte_t ent;
-
-	auto &dfltrte = state.vs_dflt_rte;
-	if (cmdmap_get_str(map, "raddr", &ip))
-		goto incomplete;
-
-	bzero(&ent.ri_raddr, sizeof(vxin_t));
-	v6 = (index(ip, ':') != NULL);
-	domain = v6 ? AF_INET6 : AF_INET;
-	if (inet_pton(domain, ip, &ent.ri_raddr))
-		goto badparse;
-	/* XXX check routing table */
-
-	/*************************/
-	if (v6 && (ent.ri_flags & RI_IPV6) &&
-		(memcmp(&ent.ri_raddr.in6, &dfltrte.ri_raddr.in6, 16) == 0)) {
-		found = true;
-	} else if (!v6 && !(ent.ri_flags & RI_IPV6) &&
-			   (ent.ri_raddr.in4.s_addr == dfltrte.ri_raddr.in4.s_addr)) {
-		found = true;
-	}
-	if (found)
-		bzero(&dfltrte, sizeof(rte_t));
-
-	result = dflt_result(seqno, ERR_SUCCESS);
-	return 0;
-  badparse:
-	result = dflt_result(seqno, ERR_PARSE);
-	return EINVAL;
-  incomplete:
-	result = dflt_result(seqno, ERR_INCOMPLETE);
-	return EINVAL;
-}
-
-static int
-route_get_all_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &result)
-{
-	auto &dfltrte = state.vs_dflt_rte;
-	struct result_map rmap;
-	char buf[INET6_ADDRSTRLEN];
-	int domain;
-
-	result = dflt_result(seqno, ERR_SUCCESS);
-	if ((dfltrte.ri_flags & RI_VALID) == 0)
-		return 0;
-	domain = (dfltrte.ri_flags & RI_IPV6) ? AF_INET6 : AF_INET;
-	inet_ntop(domain, &dfltrte.ri_raddr, buf, INET6_ADDRSTRLEN);
-	rmap.insert("raddr", buf);
-	inet_ntop(domain, &dfltrte.ri_laddr, buf, INET6_ADDRSTRLEN);
-	rmap.insert("laddr", buf);
-	rmap.insert("prefixlen", dfltrte.ri_prefixlen);
-	strcpy(buf, "true");
-	rmap.insert("default", buf);
-	result = gen_result(seqno, ERR_SUCCESS, rmap.to_str());
-	return 0;
-}
-
 #endif
 
 int
@@ -324,3 +208,8 @@ cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 	return 0;
 }
 
+int
+cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
+{
+	return 0;
+}

@@ -248,7 +248,8 @@ int cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state
 #ifdef __cplusplus
 extern "C" {
 #endif
-int cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *, void *arg);
+	int cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *, void *arg);
+	int cmd_initiate(char *rxbuf, char *txbuf, path_state_t *, void *arg);
 #ifdef __cplusplus
 }
 #endif
