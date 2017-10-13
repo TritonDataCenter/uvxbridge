@@ -254,7 +254,7 @@ static void
 ip_fill(struct ip *ip, uint32_t sip, uint32_t dip, uint16_t len, uint8_t proto)
 {
 	ip->ip_v = 4;
-	ip->ip_hl = 4;
+	ip->ip_hl = (sizeof(struct ip) >> 2);
 	ip->ip_tos = 0;
 	ip->ip_len = htons(len);
 	ip->ip_id = 0;
