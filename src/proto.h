@@ -28,7 +28,7 @@ struct dhcp {
 	/* 108 */
 	char		 bp_file[BP_FILE_LEN];	/* boot file name */
 	/* 236 */
-	uint32_t bp_vendid;
+	uint32_t	 bp_vendid;
 	unsigned char	 bp_vend[0];	/* vendor-specific area */
 };
 
