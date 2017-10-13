@@ -28,4 +28,29 @@ struct bootp {
     /* note that bp_vend can be longer, extending to end of packet. */
 };
 
+/*
+ * UDP port numbers, server and client.
+ */
+#define IPPORT_BOOTPS           67
+#define IPPORT_BOOTPC           68
+
+#define BOOTREPLY               2
+#define BOOTREQUEST             1
+
+/*
+ * Hardware types from Assigned Numbers RFC.
+ */
+#define HTYPE_ETHERNET            1
+#define HTYPE_EXP_ETHERNET        2
+#define HTYPE_AX25                3
+#define HTYPE_PRONET              4
+#define HTYPE_CHAOS               5
+#define HTYPE_IEEE802             6
+#define HTYPE_ARCNET              7
+
+
+#define	IPPORT_STATPS			665 /* Sun DR */
+#define	IPPORT_STATPC			666 /* DOOM */
+
+
 #endif
