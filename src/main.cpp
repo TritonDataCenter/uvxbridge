@@ -143,6 +143,10 @@ main(int argc, char *const argv[])
 		printf("missing egress netmap interface\n");
 		usage(argv[0]);
 	}
+	if (ingress != NULL && egress != NULL && !strcmp(egress, ingress)) {
+		printf("egress and ingress can't be the same");
+		usage(argv[0]);
+	}
 	state.vs_prov_mac = pmac;
 	state.vs_ctrl_mac = cmac;
 	state.vs_seed = arc4random();
