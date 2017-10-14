@@ -231,8 +231,73 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 }
 
 
-int
-data_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
+static int
+ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
+	struct ether_vlan_header *evh;
+	int hdrlen, etype;
+
+	evh = (struct ether_vlan_header *)(rxbuf);
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
+		hdrlen = ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN;
+		etype = ntohs(evh->evl_proto);
+	} else {
+		hdrlen = ETHER_HDR_LEN;
+		etype = ntohs(evh->evl_encap_proto);
+	}
+	switch (etype) {
+		case ETHERTYPE_ARP:
+			return data_dispatch_arp(rxbuf, txbuf, ps, state);
+			break;
+		case ETHERTYPE_IP:
+			return vxlan_decap_v4(rxbuf, txbuf, ps, state);
+			break;
+		case ETHERTYPE_IPV6:
+			/* not yet supported */
+			break;
+		default:
+			printf("unrecognized packet type %x\n", etype);
+			break;
+	}
 	return (0);
+}
+
+static int
+egress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
+{
+	struct ether_vlan_header *evh;
+	int etype;
+
+	evh = (struct ether_vlan_header *)(rxbuf);
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN))
+		etype = ntohs(evh->evl_proto);
+	else
+		etype = ntohs(evh->evl_encap_proto);
+
+	switch (etype) {
+		case ETHERTYPE_ARP:
+			/* VXLAN arp handled by provisioning agent */
+			break;
+		case ETHERTYPE_IP:
+			return vxlan_encap_v4(rxbuf, txbuf, ps, state);
+			break;
+		case ETHERTYPE_IPV6:
+			/* not yet supported */
+			break;
+		default:
+			printf("unrecognized packet type %x\n", etype);
+			break;
+	}
+	return (0);
+}
+
+int
+data_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
+{
+	vxstate_t *state = (vxstate_t *)arg;
+
+	if (ps->ps_dir == AtoB)
+		return egress_dispatch(rxbuf, txbuf, ps, state);
+	else
+		return ingress_dispatch(rxbuf, txbuf, ps, state);
 }

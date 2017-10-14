@@ -62,10 +62,10 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
 	struct arphdr_ether *sah, *dah;
 	struct ether_header *eh;
-	int op, len;
+	int op;
 	uint32_t hostip, targetpa = 0;
 	uint16_t *rmacp, *lmacp;
-	uint64_t targetha = 0, reply = 0;
+	uint64_t len, targetha = 0, reply = 0;
 	l2tbl_t &l2tbl = state->vs_l2_phys;
 	ftable_t &ftable = state->vs_ftable;
 	mac_vni_map_t &vnitbl = state->vs_vni_table.mac2vni;
@@ -201,7 +201,7 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	/* save potential cache stall to the end */
 	if (reply) {
 		eh = (struct ether_header *)txbuf;
-		lmacp = (uint16_t *)&eh->ether_dhost;
+		lmacp = (uint16_t *)(uintptr_t)&eh->ether_dhost;
 		rmacp =  (uint16_t *)&state->vs_prov_mac;
 		lmacp[0] = rmacp[0];
 		lmacp[1] = rmacp[1];
@@ -239,7 +239,7 @@ eh_fill(struct ether_header *eh, uint64_t smac, uint64_t dmac, uint16_t type)
 {
 	uint16_t *d, *s;
 
-	d = (uint16_t *)eh; /* ether_dhost */
+	d = (uint16_t *)(uintptr_t)eh; /* ether_dhost */
 	s = (uint16_t *)&dmac;
 	d[0] = s[0];
 	d[1] = s[1];
@@ -299,9 +299,9 @@ int
 cmd_send_dhcp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
 	struct ether_header *eh = (struct ether_header *)txbuf;
-	struct ip *ip = (struct ip *)(eh + 1);
+	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
 	struct udphdr *uh = (struct udphdr *)(ip + 1);
-	struct dhcp *bp = (struct dhcp *)(uh + 1);
+	struct dhcp *bp = (struct dhcp *)(uintptr_t)(uh + 1);
 
 	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
 	/* source IP unknown, dest broadcast IP */
@@ -323,9 +323,9 @@ cmd_send_heartbeat(char *rxbuf __unused, char *txbuf, path_state_t *ps,
 				   vxstate_t *state)
 {
 	struct ether_header *eh = (struct ether_header *)txbuf;
-	struct ip *ip = (struct ip *)(eh + 1);
+	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
 	struct udphdr *uh = (struct udphdr *)(ip + 1);
-	struct uvxstat *stat = (struct uvxstat *)(uh + 1);
+	struct uvxstat *stat = (struct uvxstat *)(uintptr_t)(uh + 1);
 
 	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
 	/* source IP unknown, dest broadcast IP */
@@ -355,9 +355,9 @@ cmd_dispatch_bp(struct dhcp *bp, vxstate_t *state)
 int
 cmd_dispatch_ip(char *rxbuf, char *txbuf __unused, path_state_t *ps, vxstate_t *state)
 {
-	struct ip *ip = (struct ip *)(rxbuf + ETHER_HDR_LEN);
-	struct udphdr *uh = (struct udphdr *)((caddr_t)ip + (ip->ip_hl << 2));
-	struct dhcp *bp = (struct dhcp *)(uh + 1);
+	struct ip *ip = (struct ip *)(uintptr_t)(rxbuf + ETHER_HDR_LEN);
+	struct udphdr *uh = (struct udphdr *)(uintptr_t)((caddr_t)ip + (ip->ip_hl << 2));
+	struct dhcp *bp = (struct dhcp *)(uintptr_t)(uh + 1);
 	/* validate ip header */
 
 	/* validate the UDP header */
@@ -393,17 +393,6 @@ nd_request(struct arphdr_ether *sae, arphdr_ether *dae, vxstate_t &state, l2tbl_
 	return true;
 }
 
-/*
- * If valid, deencapsulate rxbuf in to txbuf
- *
- */
-bool
-vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
-{
-
-	nm_pkt_copy(rxbuf, txbuf, len);
-	return true;
-}
 #endif
 
 
@@ -419,6 +408,14 @@ mac2u64(uint8_t *mac)
 	dst[1] = src[1];
 	dst[2] = src[2];
 	return (targetha);
+}
+
+
+int
+data_dispatch_arp(char *rxbuf, char *txbuf __unused, path_state_t *ps,
+				  vxstate_t *state)
+{
+	return (0);
 }
 /*
  * If valid, encapsulate rxbuf in to txbuf
@@ -447,7 +444,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 		hdrlen = ETHER_HDR_LEN;
 		etype = ntohs(evh->evl_encap_proto);
 	}
-	if (etype != ETHERTYPE_IP && etype != ETHERTYPE_IPV6)
+	if (etype != ETHERTYPE_IP)
 		return false;
 	/* first map evh->evl_shost -> vxlanid / vlanid  --- vs_vni_table */
 
@@ -511,4 +508,11 @@ vxlan_encap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 	evhrsp = (struct ether_vlan_header *)(txbuf);
     //nm_pkt_copy(rxbuf, txbuf, len);
     return true;
+}
+
+int
+vxlan_decap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
+			   vxstate_t *state)
+{
+	return (0);
 }
