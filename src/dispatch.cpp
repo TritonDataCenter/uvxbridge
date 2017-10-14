@@ -235,16 +235,14 @@ static int
 ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
 	struct ether_vlan_header *evh;
-	int hdrlen, etype;
+	int etype;
 
 	evh = (struct ether_vlan_header *)(rxbuf);
-	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
-		hdrlen = ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN;
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN))
 		etype = ntohs(evh->evl_proto);
-	} else {
-		hdrlen = ETHER_HDR_LEN;
+	else
 		etype = ntohs(evh->evl_encap_proto);
-	}
+
 	switch (etype) {
 		case ETHERTYPE_ARP:
 			return data_dispatch_arp(rxbuf, txbuf, ps, state);
