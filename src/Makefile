@@ -7,8 +7,8 @@ CXXFLAGS+= -std=c++11
 
 main.o: main.cpp uvxbridge.h
 	$(CXX) $(CXXFLAGS) -c main.cpp
-cmddispatch.o: cmddispatch.cpp uvxbridge.h
-	$(CXX) $(CXXFLAGS) -c cmddispatch.cpp
+dispatch.o: dispatch.cpp uvxbridge.h
+	$(CXX) $(CXXFLAGS) -c dispatch.cpp
 datapath.o: datapath.c uvxbridge.h uvxlan.h
 	$(CC) $(CFLAGS) -c datapath.c
 uvxlan.o: uvxlan.cpp uvxbridge.h uvxlan.h
@@ -17,8 +17,8 @@ uvxlan.o: uvxlan.cpp uvxbridge.h uvxlan.h
 xxhash.o: xxhash.c xxhash.h
 	$(CC) $(CFLAGS) -c xxhash.c
 
-uvxbridge: main.o cmddispatch.o datapath.o uvxlan.o xxhash.o
-	$(CXX) main.o cmddispatch.o datapath.o uvxlan.o xxhash.o -pthread -o uvxbridge
+uvxbridge: main.o dispatch.o datapath.o uvxlan.o xxhash.o
+	$(CXX) main.o dispatch.o datapath.o uvxlan.o xxhash.o -pthread -o uvxbridge
 
 
 all: uvxbridge
