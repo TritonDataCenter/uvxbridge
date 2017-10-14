@@ -149,4 +149,10 @@ typedef struct vxlan_state {
 	struct uvxstat vs_stats;
 } vxstate_t;
 
+#define DBG(_fmt, ...)						\
+do {									\
+	   if (debug) {							\
+		   fprintf(stderr, _fmt, ##__VA_ARGS__);	\
+	   } \
+} while (0)
 #endif

@@ -347,6 +347,7 @@ cmd_dispatch_bp(struct dhcp *bp, vxstate_t *state)
 	rte->ri_laddr.in4.s_addr = bp->bp_ciaddr.s_addr;
 	rte->ri_raddr.in4.s_addr = bp->bp_giaddr.s_addr;
 	rte->ri_flags = RI_VALID;
+	DBG("route installed\n");
 	return (1);
 }
 
