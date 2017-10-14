@@ -32,6 +32,7 @@
 #include <sys/un.h>
 #include <arpa/inet.h>
 #include <net/ethernet.h>
+#include <netinet/in.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -127,6 +128,9 @@ main(int argc, char *const argv[])
 	bzero(&port_args, sizeof(dp_args_t));
 	state.vs_prov_mac = pmac;
 	state.vs_ctrl_mac = cmac;
+	state.vs_seed = arc4random();
+	state.vs_min_port = IPPORT_EPHEMERALFIRST;	/* 10000 */
+	state.vs_max_port = IPPORT_EPHEMERALLAST;	/* 65535 */
 	/* start datapath thread */
 	/* .... */
 	port_args.da_pa_name = config;

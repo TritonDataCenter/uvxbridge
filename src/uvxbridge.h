@@ -147,6 +147,11 @@ typedef struct vxlan_state {
 
 	/* statistics */
 	struct uvxstat vs_stats;
+
+	/* encap port allocation */
+	uint16_t vs_min_port;
+	uint16_t vs_max_port;
+	uint32_t vs_seed;
 } vxstate_t;
 
 #define DBG(_fmt, ...)						\

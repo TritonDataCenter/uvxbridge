@@ -37,6 +37,7 @@
 #include "uvxbridge.h"
 #include "uvxlan.h"
 #include "proto.h"
+#include "xxhash.h"
 
 #define AE_REQUEST		0x0100040600080100UL
 #define AE_REPLY		0x0200040600080100UL
@@ -404,15 +405,39 @@ vxlan_decap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 	return true;
 }
 #endif
+
+
+static uint64_t
+mac2u64(uint8_t *mac)
+{
+	uint64_t targetha = 0;
+	uint16_t *src, *dst;
+
+	src = (uint16_t *)(uintptr_t)mac;
+	dst = (uint16_t *)targetha;
+	dst[0] = src[0];
+	dst[1] = src[1];
+	dst[2] = src[2];
+	return (targetha);
+}
 /*
  * If valid, encapsulate rxbuf in to txbuf
  *
  */
-bool
-vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
+int
+vxlan_encap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
+			   vxstate_t *state)
 {
 	struct ether_vlan_header *evh, *evhrsp;
 	int hdrlen, etype;
+	mac_vni_map_t *vnitbl = &state->vs_vni_table.mac2vni;
+	ftable_t *ftable = &state->vs_ftable;
+	rte_t *rte = &state->vs_dflt_rte;
+	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
+	vnient_t vnient;
+	uint64_t dstmac, targetha = 0;
+	uint16_t sport;
+	uint32_t vxlanid, laddr, raddr, maskraddr, maskladdr, range;
 
 	evh = (struct ether_vlan_header *)(rxbuf);
 	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
@@ -424,21 +449,66 @@ vxlan_encap(char *rxbuf, char *txbuf, int len, vxstate_t &state __unused)
 	}
 	if (etype != ETHERTYPE_IP && etype != ETHERTYPE_IPV6)
 		return false;
-	/* first map evh->evl_shost -> vxlanid / vlanid */
+	/* first map evh->evl_shost -> vxlanid / vlanid  --- vs_vni_table */
+
+	auto it_vni = vnitbl->find(targetha);
+	if (it_vni != vnitbl->end()) {
+		vnient.data = it_vni->second;
+		vxlanid = vnient.fields.vxlanid;
+	} else {
+		/* send request for VXLANID */
+		return (0);
+	}
 	/* ..... */
-	/* next map evh->evl_dhost -> remote ip addr in the corresponding forwarding table */
+	/* next map evh->evl_dhost -> remote ip addr in the
+	 * corresponding forwarding table - check vs_ftable
+	 *
+	 */
+	targetha = mac2u64(evh->evl_shost);
+	auto it_fte = ftable->find(targetha);
+	if (it_fte != ftable->end()) {
+		raddr = it_fte->second.vfe_raddr.in4.s_addr;
+	} else {
+		/* send RARP for ftable entry */
+		return (0);
+	}
+
 	/* ..... */
-	/* next check if remote ip is on our local subnet */
+	/* next check if remote ip is on our local subnet
+	 * chech address & subnet mask
+	 */
+	maskraddr = raddr & rte->ri_mask.in4.s_addr;
+	maskladdr = laddr & rte->ri_mask.in4.s_addr;
 	/* .... */
-	/* if yes - lookup MAC address for peer */
+	/* if yes - lookup MAC address for peer - vs_l2_phys */
+	if (maskraddr == maskladdr) {
+		auto it = l2tbl->find(raddr);
+		if (it == l2tbl->end()) {
+			/* call ARP for L2 addr */
+			return (0);
+		}
+		dstmac = it->second;
+	} else {
+		/* .... */
+		/* if no - lookup MAC address for corresponding router
+		 * vs_dflt_rte -> vs_l2_phys
+		 */
+		auto it = l2tbl->find(rte->ri_raddr.in4.s_addr);
+		if (it == l2tbl->end()) {
+			/* call ARP for L2 addr */
+			return (0);
+		}
+		dstmac = it->second;
+	}
 	/* .... */
-	/* if no - lookup MAC address for corresponding router */
-	/* .... */
-	/* use source IP for said subnet */
+	laddr = rte->ri_laddr.in4.s_addr;
+
 	/* calculate source port */
+	range = state->vs_max_port - state->vs_min_port + 1;
+	sport = XXH32(rxbuf, ETHER_HDR_LEN, state->vs_seed) % range;
 	/* .... */
 
 	evhrsp = (struct ether_vlan_header *)(txbuf);
-    nm_pkt_copy(rxbuf, txbuf, len);
+    //nm_pkt_copy(rxbuf, txbuf, len);
     return true;
 }
