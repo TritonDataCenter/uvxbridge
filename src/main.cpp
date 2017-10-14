@@ -37,6 +37,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "uvxbridge.h"
 #include "uvxlan.h"
@@ -50,20 +51,35 @@ usage(char *name)
 	exit(1);
 }
 
-uint64_t
+static uint64_t
 mac_parse(char *input)
 {
 	char *idx, *mac = strdup(input);
 	const char *del = ":";
-	uint8_t mac_num[8];
+	uint64_t mac_num = 0;
+	uint8_t *mac_nump = (uint8_t *)&mac_num;
 	int i;
 
 	for (i = 0; ((idx = strsep(&mac, del)) != NULL) && i < ETHER_ADDR_LEN; i++)
-		mac_num[i] = strtol(idx, NULL, 16);
+		mac_nump[i] = (uint8_t)strtol(idx, NULL, 16);
 	free(mac);
 	if (i < ETHER_ADDR_LEN)
 		return 0;
-	return  *(uint64_t *)&mac_num;
+	return	mac_num;
+}
+
+struct dp_thr_args {
+	dp_args_t *port_args;
+	vxstate_t *state;
+};
+
+void *
+datapath_thr(void *args)
+{
+	struct dp_thr_args *dargs = (struct dp_thr_args *)args;
+
+	run_datapath(dargs->port_args, dargs->state);
+	return (NULL);
 }
 
 int
@@ -72,8 +88,10 @@ main(int argc, char *const argv[])
 	int ch;
 	char *ingress, *egress, *config, *log;
 	uint64_t pmac, cmac;
-	vxstate_t state;
-	dp_args_t port_args;
+	vxstate_t state, data_state;
+	dp_args_t cmd_port_args, data_port_args;
+	struct dp_thr_args dta;
+	pthread_t dp_thread;
 
 	ingress = egress = config = NULL;
 	pmac = cmac = 0;
@@ -125,20 +143,37 @@ main(int argc, char *const argv[])
 		printf("missing egress netmap interface\n");
 		usage(argv[0]);
 	}
-	bzero(&port_args, sizeof(dp_args_t));
 	state.vs_prov_mac = pmac;
 	state.vs_ctrl_mac = cmac;
 	state.vs_seed = arc4random();
 	state.vs_min_port = IPPORT_EPHEMERALFIRST;	/* 10000 */
 	state.vs_max_port = IPPORT_EPHEMERALLAST;	/* 65535 */
-	/* start datapath thread */
-	/* .... */
-	port_args.da_pa_name = config;
-	port_args.da_pb_name = NULL;
-	port_args.da_pa = &state.vs_nm_config;
-	port_args.da_rx_dispatch = cmd_dispatch;
-	port_args.da_tx_dispatch = cmd_initiate;
-	port_args.da_poll_timeout = 1000;
-	run_datapath(&port_args, &state);
+
+	if (ingress != NULL && egress != NULL) {
+		/* start datapath thread */
+		bzero(&data_port_args, sizeof(dp_args_t));
+		data_port_args.da_pa_name = ingress;
+		data_port_args.da_pb_name = egress;
+		data_port_args.da_pa = &state.vs_nm_ingress;
+		data_port_args.da_pb = &state.vs_nm_egress;
+		data_port_args.da_rx_dispatch = data_dispatch;
+		data_port_args.da_poll_timeout = 1000;
+
+		data_state = state;
+		dta.state = &data_state;
+		dta.port_args = &data_port_args;
+		if (pthread_create(&dp_thread, NULL, datapath_thr, &dta)) {
+			perror("failed to start datapath thread\n");
+			exit(1);
+		}
+	}
+	bzero(&cmd_port_args, sizeof(dp_args_t));
+	cmd_port_args.da_pa_name = config;
+	cmd_port_args.da_pb_name = NULL;
+	cmd_port_args.da_pa = &state.vs_nm_config;
+	cmd_port_args.da_rx_dispatch = cmd_dispatch;
+	cmd_port_args.da_tx_dispatch = cmd_initiate;
+	cmd_port_args.da_poll_timeout = 1000;
+	run_datapath(&cmd_port_args, &state);
 	return 0;
 }

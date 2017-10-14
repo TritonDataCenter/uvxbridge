@@ -183,7 +183,7 @@ cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 
 	eh = (struct ether_header *)rxbuf;
 	etype = ntohs(eh->ether_type);
-	dmac = le64toh(*(uint64_t *)(rxbuf))& 0xffffffffffff;
+	dmac = le64toh(*(uint64_t *)(uintptr_t)(rxbuf))& 0xffffffffffff;
 
 	/* XXX check source mac too */
 	if (dmac != vs->vs_ctrl_mac && debug < 2) {
@@ -228,4 +228,11 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 		cmd_send_dhcp(rxbuf, txbuf, ps, state);
 
 	return (1);
+}
+
+
+int
+data_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
+{
+	return (0);
 }

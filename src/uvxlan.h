@@ -254,6 +254,7 @@ int cmd_send_heartbeat(char *rxbuf __unused, char *txbuf, path_state_t *ps,
 #ifdef __cplusplus
 extern "C" {
 #endif
+	int data_dispatch(char *rxbuf, char *txbuf, path_state_t *, void *arg);
 	int cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *, void *arg);
 	int cmd_initiate(char *rxbuf, char *txbuf, path_state_t *, void *arg);
 #ifdef __cplusplus

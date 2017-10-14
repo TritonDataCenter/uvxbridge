@@ -18,7 +18,7 @@ xxhash.o: xxhash.c xxhash.h
 	$(CC) $(CFLAGS) -c xxhash.c
 
 uvxbridge: main.o cmddispatch.o datapath.o uvxlan.o xxhash.o
-	$(CXX) main.o cmddispatch.o datapath.o uvxlan.o xxhash.o -o uvxbridge
+	$(CXX) main.o cmddispatch.o datapath.o uvxlan.o xxhash.o -pthread -o uvxbridge
 
 
 all: uvxbridge
