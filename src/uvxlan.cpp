@@ -526,6 +526,8 @@ cmd_dispatch_ip(char *rxbuf, char *txbuf_ __unused, path_state_t *ps, vxstate_t 
 		 */
 		data_send_arp_phys(rxbuf, txbuf, &psgrat, state, 1);
 		txring_next(&psgrat, 60);
+		/* XXX proactively resolve the MAC address for the gateway */
+		/* ... */
 	}
 	return (0);
 }
