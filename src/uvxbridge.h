@@ -108,6 +108,7 @@ typedef struct routeinfo {
 
 typedef pair<uint64_t, vfe_t> fwdent;
 typedef map<uint64_t, vfe_t> ftable_t;
+typedef map<uint32_t, ftable_t> ftablemap_t;
 
 struct uvxstat {
 	uint64_t uvx_egress_rx_pkt;
@@ -136,7 +137,7 @@ typedef struct vxlan_state {
 	struct nm_desc *vs_nm_egress;
 	
 	/* forwarding table */
-	ftable_t vs_ftable;
+	ftablemap_t vs_ftables;
 
 	/* phys nd table */
 	l2tbl_t vs_l2_phys;

@@ -57,6 +57,32 @@
 #define A(val) printf("got %s\n", #val)
 extern int debug;
 
+static uint64_t
+mactou64(uint8_t *mac)
+{
+	uint64_t targetha = 0;
+	uint16_t *src, *dst;
+
+	src = (uint16_t *)(uintptr_t)mac;
+	dst = (uint16_t *)targetha;
+	dst[0] = src[0];
+	dst[1] = src[1];
+	dst[2] = src[2];
+	return (targetha);
+}
+
+static void
+u64tomac(uint64_t smac, uint8_t *dmac)
+{
+	uint16_t *src, *dst;
+
+	dst = (uint16_t *)(uintptr_t)dmac;
+	src = (uint16_t *)&smac;
+	dst[0] = src[0];
+	dst[1] = src[1];
+	dst[2] = src[2];
+}
+
 int
 cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
@@ -67,13 +93,14 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	uint16_t *rmacp, *lmacp;
 	uint64_t len, targetha = 0, reply = 0;
 	l2tbl_t &l2tbl = state->vs_l2_phys;
-	ftable_t &ftable = state->vs_ftable;
+	ftablemap_t &ftablemap = state->vs_ftables;
 	mac_vni_map_t &vnitbl = state->vs_vni_table.mac2vni;
 
 	len = ps->ps_rx_len;
 	if (len < ETHER_HDR_LEN + sizeof(struct arphdr_ether) && debug < 2)
 		return 0;
 
+	eh = (struct ether_header *)(rxbuf);
 	sah = (struct arphdr_ether *)(rxbuf + ETHER_HDR_LEN);
 	dah = (struct arphdr_ether *)(txbuf + ETHER_HDR_LEN);
 	op = ntohs(sah->ae_hdr.fields.ar_op);
@@ -102,9 +129,16 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 		case ARPOP_REVREQUEST: {
 			/* ipv4 forwarding table lookup */
 			A(ARPOP_REVREQUEST);
-			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
-			auto it = ftable.find(targetha);
-			if (it != ftable.end() && it->second.vfe_v6 == 0) {
+			targetha = mactou64(eh->ether_shost);
+			auto ftable_it = ftablemap.find(targetha);
+			if (ftable_it == ftablemap.end()) {
+				reply = AE_VM_VXLANID_REQUEST;
+				targetpa = 0;
+				break;
+			}
+			targetha = mactou64(sah->ae_tha);
+			auto it = ftable_it->second.find(targetha);
+			if (it != ftable_it->second.end() && it->second.vfe_v6 == 0) {
 				reply = AE_REVREPLY;
 				targetpa = it->second.vfe_raddr.in4.s_addr;
 			}
@@ -114,12 +148,19 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 			/* ipv4 forwarding table update */
 			A(ARPOP_REVREPLY);
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
+			targetha = mactou64(eh->ether_shost);
+			auto ftable_it = ftablemap.find(targetha);
+			if (ftable_it == ftablemap.end()) {
+				reply = AE_VM_VXLANID_REQUEST;
+				targetpa = 0;
+				break;
+			}
 			if (sah->ae_tpa == 0)
-				ftable.erase(targetha);
+				ftable_it->second.erase(targetha);
 			else {
 				vfe_t vfe;
 				vfe.vfe_raddr.in4.s_addr = sah->ae_tpa;
-				ftable.insert(fwdent(targetha, vfe));
+				ftable_it->second.insert(fwdent(targetha, vfe));
 			}
 			break;
 		}
@@ -145,13 +186,24 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 		case ARPOP_VM_VXLANID_REQUEST_ALL:
 			A(ARPOP_VM_VXLANID_REQUEST_ALL);
 			break;
-		case ARPOP_VM_VXLANID_REPLY:
+		case ARPOP_VM_VXLANID_REPLY: {
+			vnient_t ent;
+			uint32_t vxlanid;
+
 			A(ARPOP_VM_VXLANID_REPLY);
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
-			if (sah->ae_tpa == 0)
-				vnitbl.erase(targetha);
-			else {
-				vnient_t ent;
+			if (sah->ae_tpa == 0) {
+				auto it = vnitbl.find(targetha);
+				if (it != vnitbl.end()) {
+					auto it_ftable = ftablemap.find(it->second);
+					if (it_ftable != ftablemap.end() &&
+						it_ftable->second.size() == 0)
+						ftablemap.erase(it->second);
+
+					vnitbl.erase(targetha);
+				}
+			} else {
+				ftable_t ftable;
 				auto it = vnitbl.find(targetha);
 
 				if (it != vnitbl.end())
@@ -160,8 +212,12 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 					ent.data = 0;
 				ent.fields.vxlanid = sah->ae_tpa;
 				vnitbl.insert(u64pair(targetha, ent.data));
+				auto it_ftable = ftablemap.find(sah->ae_tpa);
+				if (it_ftable == ftablemap.end())
+					ftablemap.insert(pair<uint32_t, ftable_t>(sah->ae_tpa, ftable));
 			}
 			break;
+		}
 		case ARPOP_VM_VLANID_REQUEST: {
 			A(ARPOP_VM_VLANID_REQUEST);
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
@@ -370,32 +426,6 @@ cmd_dispatch_ip(char *rxbuf, char *txbuf __unused, path_state_t *ps, vxstate_t *
 	return cmd_dispatch_bp(bp, state);
 }
 
-static uint64_t
-mactou64(uint8_t *mac)
-{
-	uint64_t targetha = 0;
-	uint16_t *src, *dst;
-
-	src = (uint16_t *)(uintptr_t)mac;
-	dst = (uint16_t *)targetha;
-	dst[0] = src[0];
-	dst[1] = src[1];
-	dst[2] = src[2];
-	return (targetha);
-}
-
-static void
-u64tomac(uint64_t smac, uint8_t *dmac)
-{
-	uint16_t *src, *dst;
-
-	dst = (uint16_t *)(uintptr_t)dmac;
-	src = (uint16_t *)&smac;
-	dst[0] = src[0];
-	dst[1] = src[1];
-	dst[2] = src[2];
-}
-
 char *
 get_ingress_txbuf(path_state_t *ps, vxstate_t *state)
 {
@@ -478,7 +508,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 	struct ether_vlan_header *evh;
 	int hdrlen, etype;
 	mac_vni_map_t *vnitbl = &state->vs_vni_table.mac2vni;
-	ftable_t *ftable = &state->vs_ftable;
+	ftablemap_t *ftablemap = &state->vs_ftables;
 	rte_t *rte = &state->vs_dflt_rte;
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
 	struct vxlan_header *vh;
@@ -516,9 +546,15 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 	 * corresponding forwarding table - check vs_ftable
 	 *
 	 */
+	auto it_ftable = ftablemap->find(vxlanid);
+	if (it_ftable == ftablemap->end()) {
+		data_send_arp(targetha, 0, AE_VM_VXLANID_REQUEST, state);
+		/* send request for VXLANID */
+		return (0);
+	}
 	targetha = mactou64(evh->evl_shost);
-	auto it_fte = ftable->find(targetha);
-	if (it_fte != ftable->end()) {
+	auto it_fte = it_ftable->second.find(targetha);
+	if (it_fte != it_ftable->second.end()) {
 		raddr = it_fte->second.vfe_raddr.in4.s_addr;
 	} else {
 		/* send RARP for ftable entry */
