@@ -134,21 +134,12 @@ struct egress_cache {
 	} ec_hdr;
 };
 
+#define NM_PORT_MAX 8
+
 typedef struct vxlan_state {
-	struct timeval vs_tlast;
-	/* mac address for peer control interface */
-	uint64_t vs_prov_mac;
-	/* mac address for host control interface */
-	uint64_t vs_ctrl_mac;
-	/* mac address for physical interface */
-	uint64_t vs_intf_mac;
+	/* egress cache if next == prev */
+	struct egress_cache vs_ecache;
 
-	struct nm_desc *vs_nm_config;
-
-	struct nm_desc *vs_nm_ingress;
-
-	struct nm_desc *vs_nm_egress;
-	
 	/* forwarding table */
 	ftablemap_t vs_ftables;
 
@@ -161,16 +152,47 @@ typedef struct vxlan_state {
 	/* default route */
 	rte_t vs_dflt_rte;
 
-	/* statistics */
-	struct uvxstat vs_stats;
-
 	/* encap port allocation */
 	uint16_t vs_min_port;
 	uint16_t vs_max_port;
 	uint32_t vs_seed;
 
-	/* egress cache if next == prev */
-	struct egress_cache vs_ecache;
+	/*
+	 * Try to keep fields used only for configuration
+	 * management below this line
+	 */
+
+	/* mac address for peer control interface */
+	uint64_t vs_prov_mac;
+	/* mac address for host control interface */
+	uint64_t vs_ctrl_mac;
+	/* mac address for physical interface */
+	uint64_t vs_intf_mac;
+
+	struct nm_desc *vs_nm_ingress;
+
+	struct nm_desc *vs_nm_egress;
+
+	/*
+	 * Try to keep less frequently accessed
+	 * structures below this line
+	 */
+
+	/* statistics */
+	struct uvxstat vs_stats;
+
+	/* the last time *_initiate was executed */
+	struct timeval vs_tlast;
+
+	/* configuration netmap descriptor */
+	struct nm_desc *vs_nm_config;
+
+	/* if data path - our identifier */
+	uint32_t vs_datapath_id;
+	volatile uint32_t vs_datapath_count;
+
+	/* each data path's state */
+	struct vxlan_state **vs_dp_states[NM_PORT_MAX];
 } vxstate_t;
 
 #define DBG(_fmt, ...)						\
