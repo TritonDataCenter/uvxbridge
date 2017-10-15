@@ -214,6 +214,8 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 	vxstate_t *state = (vxstate_t *)arg;
 	rte_t *rte = &state->vs_dflt_rte;
 	struct timeval tnow, delta;
+	struct vxlan_state *dp_states[NM_PORT_MAX];
+	int dp_count;
 
 	gettimeofday(&tnow, NULL);
 	timersub(&tnow, &state->vs_tlast, &delta);
@@ -226,6 +228,17 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 		cmd_send_heartbeat(rxbuf, txbuf, ps, state);
 	else
 		cmd_send_dhcp(rxbuf, txbuf, ps, state);
+
+	/* update all datapath threads with a copy of the latest state */
+	dp_count = state->vs_datapath_count;
+	for (int i = 0; i < dp_count; i++) {
+		dp_states[i] = *state->vs_dp_states[i];
+		*state->vs_dp_states[i] = new vxstate_t(*state);
+	}
+	/* XXX --- clunky --- sleep for 50ms before freeing */
+	usleep(50000);
+	for (int i = 0; i < dp_count; i++)
+		delete dp_states[i];
 
 	return (1);
 }

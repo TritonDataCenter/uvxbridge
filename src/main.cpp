@@ -42,6 +42,8 @@
 #include "uvxbridge.h"
 #include "uvxlan.h"
 
+#include <machine/atomic.h>
+
 int debug;
 
 static void
@@ -70,38 +72,80 @@ mac_parse(char *input)
 
 struct dp_thr_args {
 	dp_args_t *port_args;
-	vxstate_t *state;
+	vxstate_t *self_state;
+	vxstate_t *config_state;
 };
 
 void *
 datapath_thr(void *args)
 {
 	struct dp_thr_args *dargs = (struct dp_thr_args *)args;
+	uint32_t idx = atomic_fetchadd_int(&dargs->config_state->vs_datapath_count, 1);
 
-	run_datapath(dargs->port_args, dargs->state);
+	dargs->config_state->vs_dp_states[idx] = &dargs->self_state;
+	run_datapath(dargs->port_args, dargs->self_state);
 	return (NULL);
+}
+
+void
+start_datapath(char *ingress, char *egress, vxstate_t *state, int idx)
+{
+	pthread_t dp_thread;
+	dp_args_t *data_port_args;
+	struct dp_thr_args *dta;
+	vxstate_t *data_state;
+
+	data_port_args = (dp_args_t *)malloc(sizeof(dp_args_t));
+	dta = (struct dp_thr_args *)malloc(sizeof(*dta));
+	bzero(data_port_args, sizeof(dp_args_t));
+	data_state = new vxstate_t(*state);
+	data_state->vs_datapath_id = idx;
+	dta->self_state = data_state;
+	dta->config_state = state;
+	dta->port_args = data_port_args;
+
+	data_port_args->da_pa_name = ingress;
+	data_port_args->da_pb_name = egress;
+	data_port_args->da_pa = &data_state->vs_nm_ingress;
+	data_port_args->da_pb = &data_state->vs_nm_egress;
+	data_port_args->da_rx_dispatch = data_dispatch;
+	data_port_args->da_poll_timeout = 1000;
+
+	if (pthread_create(&dp_thread, NULL, datapath_thr, dta)) {
+		perror("failed to start datapath thread\n");
+		exit(1);
+	}
 }
 
 int
 main(int argc, char *const argv[])
 {
 	int ch;
-	char *ingress, *egress, *config, *log;
+	char *ingress_ports[NM_PORT_MAX], *egress_ports[8], *config, *log;
+	uint32_t icount, ecount;
 	uint64_t pmac, cmac;
-	vxstate_t state, data_state;
-	dp_args_t cmd_port_args, data_port_args;
-	struct dp_thr_args dta;
-	pthread_t dp_thread;
+	vxstate_t *state;
+	dp_args_t cmd_port_args;
 
-	ingress = egress = config = NULL;
-	pmac = cmac = 0;
+	config = NULL;
+	icount = ecount = pmac = cmac = 0;
 	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:d:")) != -1) {
 		switch (ch) {
 			case 'i':
-				ingress = optarg;
+				if (icount == NM_PORT_MAX) {
+					printf("exceeded the maximum of %d ingress ports\n",
+						   NM_PORT_MAX);
+					usage(argv[0]);
+				}
+				ingress_ports[icount++] = optarg;
 				break;
 			case 'e':
-				egress = optarg;
+				if (ecount == NM_PORT_MAX) {
+					printf("exceeded the maximum of %d ingress ports\n",
+						   NM_PORT_MAX);
+					usage(argv[0]);
+				}
+				egress_ports[ecount++] = optarg;
 				break;
 			case 'c':
 				config = optarg;
@@ -135,53 +179,52 @@ main(int argc, char *const argv[])
 		printf("missing config netmap interface\n");
 		usage(argv[0]);
 	}
-	if (ingress == NULL && !debug) {
+	if (icount == 0 && !debug) {
 		printf("missing ingress netmap interface\n");
 		usage(argv[0]);
 	}
-	if (egress == NULL && !debug) {
+	if (ecount == 0 && !debug) {
 		printf("missing egress netmap interface\n");
 		usage(argv[0]);
 	}
-	if (ingress != NULL && egress != NULL && !strcmp(egress, ingress)) {
-		printf("egress and ingress can't be the same");
+	if (icount != ecount) {
+		printf("ingress and egress count must match\n");
 		usage(argv[0]);
 	}
-	state.vs_prov_mac = pmac;
-	state.vs_ctrl_mac = cmac;
-	state.vs_tlast.tv_sec = state.vs_tlast.tv_usec = 0;
-	bzero(&state.vs_ecache, sizeof(struct egress_cache));
-	/* XXX GET THE ACTUAL INTERFACE VALUE */
-	state.vs_intf_mac = 0xCAFEBEEFBABE;
-	state.vs_seed = arc4random();
-	state.vs_min_port = IPPORT_HIFIRSTAUTO;	/* 49152 */
-	state.vs_max_port = IPPORT_HILASTAUTO;	/* 65535 */
-
-	if (ingress != NULL && egress != NULL) {
-		/* start datapath thread */
-		bzero(&data_port_args, sizeof(dp_args_t));
-		data_port_args.da_pa_name = ingress;
-		data_port_args.da_pb_name = egress;
-		data_port_args.da_pa = &state.vs_nm_ingress;
-		data_port_args.da_pb = &state.vs_nm_egress;
-		data_port_args.da_rx_dispatch = data_dispatch;
-		data_port_args.da_poll_timeout = 1000;
-
-		data_state = state;
-		dta.state = &data_state;
-		dta.port_args = &data_port_args;
-		if (pthread_create(&dp_thread, NULL, datapath_thr, &dta)) {
-			perror("failed to start datapath thread\n");
-			exit(1);
+	for (uint32_t i = 0; i < icount; i++) {
+		for (uint32_t j = 0; j < ecount; j++) {
+			if (!strcmp(ingress_ports[i], egress_ports[j])) {
+				printf("egress and ingress can't be the same");
+				usage(argv[0]);
+			}
 		}
 	}
+
+	state = new vxstate_t();
+	state->vs_prov_mac = pmac;
+	state->vs_ctrl_mac = cmac;
+	state->vs_tlast.tv_sec = state->vs_tlast.tv_usec = 0;
+	bzero(&state->vs_ecache, sizeof(struct egress_cache));
+	/* XXX GET THE ACTUAL INTERFACE VALUE */
+	state->vs_intf_mac = 0xCAFEBEEFBABE;
+	state->vs_seed = arc4random();
+	state->vs_min_port = IPPORT_HIFIRSTAUTO;	/* 49152 */
+	state->vs_max_port = IPPORT_HILASTAUTO;	/* 65535 */
+	state->vs_datapath_count = icount;
+
+	for (uint32_t i = 0; i < icount; i++)
+		start_datapath(ingress_ports[i], egress_ports[i], state, i);
+	/* yield for 50ms intervals until all threads have started */
+	while (state->vs_datapath_count != icount)
+		usleep(50000);
+
 	bzero(&cmd_port_args, sizeof(dp_args_t));
 	cmd_port_args.da_pa_name = config;
 	cmd_port_args.da_pb_name = NULL;
-	cmd_port_args.da_pa = &state.vs_nm_config;
+	cmd_port_args.da_pa = &state->vs_nm_config;
 	cmd_port_args.da_rx_dispatch = cmd_dispatch;
 	cmd_port_args.da_tx_dispatch = cmd_initiate;
 	cmd_port_args.da_poll_timeout = 1000;
-	run_datapath(&cmd_port_args, &state);
+	run_datapath(&cmd_port_args, state);
 	return 0;
 }
