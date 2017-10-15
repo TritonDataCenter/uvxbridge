@@ -615,5 +615,21 @@ int
 vxlan_decap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 			   vxstate_t *state)
 {
-	return (0);
+	struct vxlan_header *vh = (struct vxlan_header *)rxbuf;
+	uint32_t rxvxlanid = vh->vh_vxlanhdr.v_vxlanid;
+	struct ether_header *eh = (struct ether_header *)(rxbuf + sizeof(*vh));
+	uint64_t dmac = mactou64(eh->ether_dhost);
+	mac_vni_map_t &vnimap = state->vs_vni_table.mac2vni;
+
+	auto it = vnimap.find(dmac);
+	/* we have no knowledge of this MAC address */
+	if (it == vnimap.end())
+		return (0);
+	/* this MAC address isn't on the VXLAN that we were addressed with */
+	if (it->second != rxvxlanid)
+		return (0);
+	/* copy encapsulated packet */
+	nm_pkt_copy(rxbuf, txbuf + sizeof(*vh), ps->ps_rx_len);
+
+	return (1);
 }
