@@ -188,7 +188,6 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 			break;
 		case ARPOP_VM_VXLANID_REPLY: {
 			vnient_t ent;
-			uint32_t vxlanid;
 
 			A(ARPOP_VM_VXLANID_REPLY);
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
@@ -475,14 +474,53 @@ data_send_arp(uint64_t targetha, uint32_t targetip, uint64_t op, vxstate_t *stat
 	txring_next(&ps, 60);
 }
 
+void
+data_send_arp_phys(char *txbuf, path_state_t *ps, vxstate_t *state)
+{
+	struct arphdr_ether *dae;
+	struct ether_vlan_header *evh;
+	uint64_t broadcast = 0xFFFFFFFFFFFF;
+
+	evh = (struct ether_vlan_header *)(txbuf);
+	/* XXX hardcoding no VLAN */
+	dae = (struct arphdr_ether *)(txbuf + ETHER_HDR_LEN);
+	eh_fill((struct ether_header *)evh, state->vs_intf_mac, broadcast, ETHERTYPE_ARP);
+	dae->ae_hdr.data = AE_REPLY;
+	dae->ae_spa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
+	u64tomac(state->vs_intf_mac, dae->ae_sha);
+	dae->ae_tpa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
+	u64tomac(state->vs_intf_mac, dae->ae_tha);
+	*(ps->ps_tx_len) = 60;
+}
+
 /*
  * Respond to queries for our encapsulating IP
  */
 int
-data_dispatch_arp_phys(char *rxbuf, char *txbuf __unused, path_state_t *ps,
+data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps,
 				  vxstate_t *state)
 {
-	return (0);
+	struct arphdr_ether *sah;
+	struct ether_vlan_header *evh;
+	int etype, hdrlen;
+
+	evh = (struct ether_vlan_header *)(rxbuf);
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
+		etype = ntohs(evh->evl_proto);
+		hdrlen = ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN;
+	} else {
+		etype = ntohs(evh->evl_encap_proto);
+		hdrlen = ETHER_HDR_LEN;
+	}
+	sah = (struct arphdr_ether *)(rxbuf + hdrlen);
+	if (sah->ae_hdr.data != AE_REQUEST)
+		return (0);
+	if (sah->ae_tpa != state->vs_dflt_rte.ri_laddr.in4.s_addr)
+		return (0);
+
+	/* we've confirmed that it's bound for us - we need to respond */
+	data_send_arp_phys(txbuf, ps, state);
+	return (1);
 }
 
 /*
