@@ -4,13 +4,14 @@ user level vxlan bridge
 uvxbridge -i \<ingress\> -e \<egress\> -c \<config\> -m \<config mac address\> -p \<provisioning agent mac address\> [-d]
 
 v0.1:
-2017.10.13 - Friday
+2017.10.13 - Friday --- DONE
 - v4 only
 - VLAN support incomplete
 - regular MTU only
 - only a single interface address and default route is accepted
 - 2 copies on both ingress and egress
 - VALE permits broadcast
+- supports up to 8 ingress/egress pairs for greater parallelism as needed
 
 v0.2:
 2017.10.20 - Friday
