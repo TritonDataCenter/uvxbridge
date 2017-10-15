@@ -149,9 +149,11 @@ main(int argc, char *const argv[])
 	}
 	state.vs_prov_mac = pmac;
 	state.vs_ctrl_mac = cmac;
+	/* XXX GET THE ACTUAL INTERFACE VALUE */
+	state.vs_intf_mac = 0xCAFEBEEFBABE;
 	state.vs_seed = arc4random();
-	state.vs_min_port = IPPORT_EPHEMERALFIRST;	/* 10000 */
-	state.vs_max_port = IPPORT_EPHEMERALLAST;	/* 65535 */
+	state.vs_min_port = IPPORT_HIFIRSTAUTO;	/* 49152 */
+	state.vs_max_port = IPPORT_HILASTAUTO;	/* 65535 */
 
 	if (ingress != NULL && egress != NULL) {
 		/* start datapath thread */

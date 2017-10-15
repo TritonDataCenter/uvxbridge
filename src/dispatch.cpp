@@ -245,7 +245,7 @@ ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 
 	switch (etype) {
 		case ETHERTYPE_ARP:
-			return data_dispatch_arp(rxbuf, txbuf, ps, state);
+			return data_dispatch_arp_phys(rxbuf, txbuf, ps, state);
 			break;
 		case ETHERTYPE_IP:
 			return vxlan_decap_v4(rxbuf, txbuf, ps, state);
@@ -274,7 +274,7 @@ egress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 
 	switch (etype) {
 		case ETHERTYPE_ARP:
-			/* VXLAN arp handled by provisioning agent */
+			data_dispatch_arp_vx(rxbuf, txbuf, ps, state);
 			break;
 		case ETHERTYPE_IP:
 			return vxlan_encap_v4(rxbuf, txbuf, ps, state);

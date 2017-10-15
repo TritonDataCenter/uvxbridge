@@ -397,7 +397,7 @@ nd_request(struct arphdr_ether *sae, arphdr_ether *dae, vxstate_t &state, l2tbl_
 
 
 static uint64_t
-mac2u64(uint8_t *mac)
+mactou64(uint8_t *mac)
 {
 	uint64_t targetha = 0;
 	uint16_t *src, *dst;
@@ -410,9 +410,85 @@ mac2u64(uint8_t *mac)
 	return (targetha);
 }
 
+static void
+u64tomac(uint64_t smac, uint8_t *dmac)
+{
+	uint16_t *src, *dst;
 
+	dst = (uint16_t *)(uintptr_t)dmac;
+	src = (uint16_t *)&smac;
+	dst[0] = src[0];
+	dst[1] = src[1];
+	dst[2] = src[2];
+}
+
+char *
+get_ingress_txbuf(path_state_t *ps, vxstate_t *state)
+{
+	struct nm_desc *pa;
+	struct netmap_ring *txring;
+	struct netmap_slot *ts;
+
+	pa = state->vs_nm_ingress;
+	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
+	ts = &txring->slot[txring->cur];
+	ps->ps_txring = txring;
+	ps->ps_tx_len = &ts->len;
+	return NETMAP_BUF(txring, ts->buf_idx);
+}
+
+void
+txring_next(path_state_t *ps, uint16_t pktlen)
+{
+	struct netmap_ring *txring = ps->ps_txring;
+
+	*ps->ps_tx_len = pktlen;
+	txring->head = txring->cur = nm_ring_next(txring, txring->cur);
+}
+
+/*
+ * Send a query to the provisioning agent
+ */
+void
+data_send_arp(uint64_t targetha, uint32_t targetip, uint64_t op, vxstate_t *state)
+{
+	struct arphdr_ether ae;
+	char *txbuf;
+	path_state_t ps;
+
+	/* get txbuf */
+	if ((txbuf = get_ingress_txbuf(&ps, state)) == NULL)
+		return;
+	ae.ae_hdr.data = op;
+	u64tomac(state->vs_ctrl_mac, ae.ae_sha);
+	/* XXX - assume v4 */
+	ae.ae_spa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
+	u64tomac(targetha, ae.ae_tha);
+	ae.ae_tpa = targetip;
+	eh_fill((struct ether_header *)txbuf, state->vs_ctrl_mac, state->vs_prov_mac,
+			ETHERTYPE_ARP);
+	memcpy(txbuf + ETHER_HDR_LEN, &ae, sizeof(struct arphdr_ether));
+	txring_next(&ps, 60);
+}
+
+/*
+ * Respond to queries for our encapsulating IP
+ */
 int
-data_dispatch_arp(char *rxbuf, char *txbuf __unused, path_state_t *ps,
+data_dispatch_arp_phys(char *rxbuf, char *txbuf __unused, path_state_t *ps,
+				  vxstate_t *state)
+{
+	return (0);
+}
+
+/*
+ * Proactively query the provisioning agent
+ * - guest MAC -> vxlanid and vlanid when they ARP
+ * - destination MAC -> remote IP when they ARP for the vxlan MAC
+ * - remote IP -> remote MAC when the remote IP is first learned
+ */
+int
+data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 				  vxstate_t *state)
 {
 	return (0);
@@ -422,21 +498,24 @@ data_dispatch_arp(char *rxbuf, char *txbuf __unused, path_state_t *ps,
  *
  */
 int
-vxlan_encap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
+vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 			   vxstate_t *state)
 {
-	struct ether_vlan_header *evh, *evhrsp;
+	struct ether_vlan_header *evh;
 	int hdrlen, etype;
 	mac_vni_map_t *vnitbl = &state->vs_vni_table.mac2vni;
 	ftable_t *ftable = &state->vs_ftable;
 	rte_t *rte = &state->vs_dflt_rte;
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
+	struct vxlan_header *vh;
 	vnient_t vnient;
-	uint64_t dstmac, targetha = 0;
-	uint16_t sport;
+	uint64_t *p, dstmac, targetha = 0;
+	uint16_t sport, pktsize;
 	uint32_t vxlanid, laddr, raddr, maskraddr, maskladdr, range;
 
 	evh = (struct ether_vlan_header *)(rxbuf);
+	laddr = rte->ri_laddr.in4.s_addr;
+
 	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
 		hdrlen = ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN;
 		etype = ntohs(evh->evl_proto);
@@ -444,8 +523,10 @@ vxlan_encap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 		hdrlen = ETHER_HDR_LEN;
 		etype = ntohs(evh->evl_encap_proto);
 	}
-	if (etype != ETHERTYPE_IP)
+	if (etype != ETHERTYPE_IP) {
+		/* we shouldn't have gotten here -- log */
 		return false;
+	}
 	/* first map evh->evl_shost -> vxlanid / vlanid  --- vs_vni_table */
 
 	auto it_vni = vnitbl->find(targetha);
@@ -453,20 +534,21 @@ vxlan_encap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 		vnient.data = it_vni->second;
 		vxlanid = vnient.fields.vxlanid;
 	} else {
+		data_send_arp(targetha, 0, AE_VM_VXLANID_REQUEST, state);
 		/* send request for VXLANID */
 		return (0);
 	}
-	/* ..... */
 	/* next map evh->evl_dhost -> remote ip addr in the
 	 * corresponding forwarding table - check vs_ftable
 	 *
 	 */
-	targetha = mac2u64(evh->evl_shost);
+	targetha = mactou64(evh->evl_shost);
 	auto it_fte = ftable->find(targetha);
 	if (it_fte != ftable->end()) {
 		raddr = it_fte->second.vfe_raddr.in4.s_addr;
 	} else {
 		/* send RARP for ftable entry */
+		data_send_arp(targetha, 0, AE_REVREQUEST, state);
 		return (0);
 	}
 
@@ -482,6 +564,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 		auto it = l2tbl->find(raddr);
 		if (it == l2tbl->end()) {
 			/* call ARP for L2 addr */
+			data_send_arp(0, raddr, AE_REQUEST, state);
 			return (0);
 		}
 		dstmac = it->second;
@@ -493,21 +576,29 @@ vxlan_encap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 		auto it = l2tbl->find(rte->ri_raddr.in4.s_addr);
 		if (it == l2tbl->end()) {
 			/* call ARP for L2 addr */
+			data_send_arp(0, raddr, AE_REQUEST, state);
 			return (0);
 		}
 		dstmac = it->second;
 	}
-	/* .... */
-	laddr = rte->ri_laddr.in4.s_addr;
 
 	/* calculate source port */
 	range = state->vs_max_port - state->vs_min_port + 1;
 	sport = XXH32(rxbuf, ETHER_HDR_LEN, state->vs_seed) % range;
-	/* .... */
-
-	evhrsp = (struct ether_vlan_header *)(txbuf);
-    //nm_pkt_copy(rxbuf, txbuf, len);
-    return true;
+	sport += state->vs_min_port;
+	/* fill out final data -- XXX assume no VLAN */
+	vh = (struct vxlan_header *)txbuf;
+	eh_fill(&vh->vh_ehdr, state->vs_intf_mac, dstmac, ETHERTYPE_IP);
+	pktsize = ps->ps_rx_len + sizeof(*vh) - sizeof(struct ether_header);
+	ip_fill((struct ip *)(uintptr_t)&vh->vh_iphdr, laddr, raddr, pktsize, IPPROTO_UDP);
+	pktsize -= sizeof(struct udphdr) - sizeof(struct ip);
+	udp_fill((struct udphdr *)(uintptr_t)&vh->vh_udphdr, sport, VXLAN_DPORT, pktsize);
+	p = (uint64_t *)(uintptr_t)&vh->vh_vxlanhdr;
+	*p = 0;
+	vh->vh_vxlanhdr.v_i = 1;
+	vh->vh_vxlanhdr.v_vxlanid = vxlanid;
+	nm_pkt_copy(rxbuf, txbuf + sizeof(*vh), ps->ps_rx_len);
+    return (1);
 }
 
 int

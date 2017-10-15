@@ -250,7 +250,8 @@ int cmd_send_heartbeat(char *rxbuf __unused, char *txbuf, path_state_t *ps,
 					   vxstate_t *state);
 
 
-int data_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
+int data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
+int data_dispatch_arp_vx(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
 int vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
 int vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
 

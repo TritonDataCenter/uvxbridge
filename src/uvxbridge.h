@@ -126,6 +126,8 @@ typedef struct vxlan_state {
 	uint64_t vs_prov_mac;
 	/* mac address for host control interface */
 	uint64_t vs_ctrl_mac;
+	/* mac address for physical interface */
+	uint64_t vs_intf_mac;
 
 	struct nm_desc *vs_nm_config;
 
