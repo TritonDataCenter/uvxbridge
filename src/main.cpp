@@ -149,6 +149,7 @@ main(int argc, char *const argv[])
 	}
 	state.vs_prov_mac = pmac;
 	state.vs_ctrl_mac = cmac;
+	state.vs_tlast.tv_sec = state.vs_tlast.tv_usec = 0;
 	/* XXX GET THE ACTUAL INTERFACE VALUE */
 	state.vs_intf_mac = 0xCAFEBEEFBABE;
 	state.vs_seed = arc4random();
