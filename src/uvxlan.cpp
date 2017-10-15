@@ -294,6 +294,10 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 				vfe_t vfe;
 				vfe.vfe_raddr.in4.s_addr = sah->ae_tpa;
 				ftable_it->second.insert(fwdent(targetha, vfe));
+				/* proactively resolve the MAC address for tpa */
+				reply = AE_REQUEST;
+				targetpa = sah->ae_tpa;
+				targetha = 0;
 			}
 			break;
 		}
