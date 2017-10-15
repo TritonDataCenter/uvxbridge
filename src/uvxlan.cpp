@@ -640,15 +640,23 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	rte_t *rte = &state->vs_dflt_rte;
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
-	struct vxlan_header *vh;
+	struct egress_cache ec;
 	vnient_t vnient;
-	uint64_t *p, dstmac, targetha = 0;
+	uint64_t srcmac, dstmac, targetha;
 	uint16_t sport, pktsize;
 	uint32_t vxlanid, laddr, raddr, maskraddr, maskladdr, range;
 
 	evh = (struct ether_vlan_header *)(rxbuf);
-	laddr = rte->ri_laddr.in4.s_addr;
-
+	srcmac = mactou64(evh->evl_shost);
+	dstmac = mactou64(evh->evl_dhost);
+	if (state->vs_ecache.ec_smac == srcmac &&
+		state->vs_ecache.ec_dmac == dstmac) {
+		/* XXX VLAN only */
+		memcpy(txbuf, &state->vs_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
+		nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
+		*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
+		return (1);
+	}
 	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
 		hdrlen = ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN;
 		etype = ntohs(evh->evl_proto);
@@ -656,12 +664,15 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 		hdrlen = ETHER_HDR_LEN;
 		etype = ntohs(evh->evl_encap_proto);
 	}
-	if (etype != ETHERTYPE_IP) {
-		/* we shouldn't have gotten here -- log */
-		return false;
-	}
-	/* first map evh->evl_shost -> vxlanid / vlanid  --- vs_vni_table */
+	ec.ec_smac = srcmac;
+	ec.ec_dmac = dstmac;
+	/* fill out final data -- XXX assume no VLAN */
+	*((uint64_t *)(uintptr_t)&ec.ec_hdr.vh.vh_vxlanhdr) = 0;
+	ec.ec_hdr.vh.vh_vxlanhdr.v_i = 1;
+	laddr = rte->ri_laddr.in4.s_addr;
 
+	/* first map evh->evl_shost -> vxlanid / vlanid  --- vs_vni_table */
+	targetha = srcmac;
 	auto it_vni = vnitbl->find(targetha);
 	if (it_vni != vnitbl->end()) {
 		vnient.data = it_vni->second;
@@ -671,6 +682,15 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 		/* send request for VXLANID */
 		return (0);
 	}
+	ec.ec_hdr.vh.vh_vxlanhdr.v_vxlanid = vxlanid;
+	/* calculate source port */
+	range = state->vs_max_port - state->vs_min_port + 1;
+	sport = XXH32(rxbuf, ETHER_HDR_LEN, state->vs_seed) % range;
+	sport += state->vs_min_port;
+	pktsize = ps->ps_rx_len + sizeof(struct vxlan_header) -
+		sizeof(struct ether_header) - sizeof(struct udphdr) - sizeof(struct ip);
+	udp_fill((struct udphdr *)(uintptr_t)&ec.ec_hdr.vh.vh_udphdr, sport, VXLAN_DPORT, pktsize);
+
 	/* next map evh->evl_dhost -> remote ip addr in the
 	 * corresponding forwarding table - check vs_ftable
 	 *
@@ -690,6 +710,9 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 		data_send_arp(targetha, 0, AE_REVREQUEST, state);
 		return (0);
 	}
+	pktsize = ps->ps_rx_len + sizeof(struct vxlan_header) - sizeof(struct ether_header);
+	ip_fill((struct ip *)(uintptr_t)&ec.ec_hdr.vh.vh_iphdr, laddr, raddr,
+			pktsize, IPPROTO_UDP);
 
 	/* ..... */
 	/* next check if remote ip is on our local subnet
@@ -720,23 +743,10 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 		}
 		dstmac = it->second;
 	}
-
-	/* calculate source port */
-	range = state->vs_max_port - state->vs_min_port + 1;
-	sport = XXH32(rxbuf, ETHER_HDR_LEN, state->vs_seed) % range;
-	sport += state->vs_min_port;
-	/* fill out final data -- XXX assume no VLAN */
-	vh = (struct vxlan_header *)txbuf;
-	eh_fill(&vh->vh_ehdr, state->vs_intf_mac, dstmac, ETHERTYPE_IP);
-	pktsize = ps->ps_rx_len + sizeof(*vh) - sizeof(struct ether_header);
-	ip_fill((struct ip *)(uintptr_t)&vh->vh_iphdr, laddr, raddr, pktsize, IPPROTO_UDP);
-	pktsize -= sizeof(struct udphdr) - sizeof(struct ip);
-	udp_fill((struct udphdr *)(uintptr_t)&vh->vh_udphdr, sport, VXLAN_DPORT, pktsize);
-	p = (uint64_t *)(uintptr_t)&vh->vh_vxlanhdr;
-	*p = 0;
-	vh->vh_vxlanhdr.v_i = 1;
-	vh->vh_vxlanhdr.v_vxlanid = vxlanid;
-	nm_pkt_copy(rxbuf, txbuf + sizeof(*vh), ps->ps_rx_len);
+	eh_fill(&ec.ec_hdr.vh.vh_ehdr, state->vs_intf_mac, dstmac, ETHERTYPE_IP);
+	memcpy(&state->vs_ecache, &ec, sizeof(struct egress_cache));
+	memcpy(txbuf, &ec.ec_hdr, sizeof(struct vxlan_header));
+	nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
     return (1);
 }
 

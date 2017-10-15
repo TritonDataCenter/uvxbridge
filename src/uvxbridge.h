@@ -33,6 +33,7 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include "proto.h"
 
 using std::string;
 using std::pair;
@@ -121,6 +122,18 @@ struct uvxstat {
 	uint64_t uvx_ingress_tx_bytes;
 };
 
+#define EC_VLAN 0x01
+#define EC_IPV6 0x02
+struct egress_cache {
+	uint64_t ec_smac;
+	uint64_t ec_dmac;
+	uint64_t ec_flags;
+	union {
+		struct vxlan_header vh;
+		struct vxlan_vlan_header vvh;
+	} ec_hdr;
+};
+
 typedef struct vxlan_state {
 	struct timeval vs_tlast;
 	/* mac address for peer control interface */
@@ -155,6 +168,9 @@ typedef struct vxlan_state {
 	uint16_t vs_min_port;
 	uint16_t vs_max_port;
 	uint32_t vs_seed;
+
+	/* egress cache if next == prev */
+	struct egress_cache vs_ecache;
 } vxstate_t;
 
 #define DBG(_fmt, ...)						\
