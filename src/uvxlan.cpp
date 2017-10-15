@@ -83,6 +83,139 @@ u64tomac(uint64_t smac, uint8_t *dmac)
 	dst[2] = src[2];
 }
 
+char *
+get_ingress_txbuf(path_state_t *ps, vxstate_t *state)
+{
+	struct nm_desc *pa;
+	struct netmap_ring *txring;
+	struct netmap_slot *ts;
+
+	pa = state->vs_nm_ingress;
+	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
+	ts = &txring->slot[txring->cur];
+	ps->ps_txring = txring;
+	ps->ps_tx_len = &ts->len;
+	return NETMAP_BUF(txring, ts->buf_idx);
+}
+
+char *
+get_egress_txbuf(path_state_t *ps, vxstate_t *state)
+{
+	struct nm_desc *pa;
+	struct netmap_ring *txring;
+	struct netmap_slot *ts;
+
+	pa = state->vs_nm_egress;
+	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
+	ts = &txring->slot[txring->cur];
+	ps->ps_txring = txring;
+	ps->ps_tx_len = &ts->len;
+	return NETMAP_BUF(txring, ts->buf_idx);
+}
+
+void
+txring_next(path_state_t *ps, uint16_t pktlen)
+{
+	struct netmap_ring *txring = ps->ps_txring;
+
+	*ps->ps_tx_len = pktlen;
+	txring->head = txring->cur = nm_ring_next(txring, txring->cur);
+}
+static __inline void
+eh_fill(struct ether_header *eh, uint64_t smac, uint64_t dmac, uint16_t type)
+{
+	uint16_t *d, *s;
+
+	d = (uint16_t *)(uintptr_t)eh; /* ether_dhost */
+	s = (uint16_t *)&dmac;
+	d[0] = s[0];
+	d[1] = s[1];
+	d[2] = s[2];
+	s = (uint16_t *)&smac;
+	d[3] = s[0];
+	d[4] = s[1];
+	d[5] = s[2];
+	eh->ether_type = htons(type);
+}
+
+static void
+ip_fill(struct ip *ip, uint32_t sip, uint32_t dip, uint16_t len, uint8_t proto)
+{
+	ip->ip_v = 4;
+	ip->ip_hl = (sizeof(struct ip) >> 2);
+	ip->ip_tos = 0;
+	ip->ip_len = htons(len);
+	ip->ip_id = 0;
+	ip->ip_off = htons(IP_DF);
+	ip->ip_ttl = 1;
+	ip->ip_p = proto;
+	ip->ip_sum = 0; /* XXX */
+	/* these should always be kept in network byte order (BE) */
+	ip->ip_src.s_addr = sip;
+	ip->ip_dst.s_addr = dip;
+}
+
+static void
+udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
+{
+	uh->uh_sport = htons(sport);
+	uh->uh_dport = htons(dport);
+	uh->uh_ulen = htons(len + sizeof(*uh));
+	uh->uh_sum = 0; /* XXX */
+}
+
+
+
+/*
+ * Send a query to the provisioning agent
+ */
+void
+data_send_arp(uint64_t targetha, uint32_t targetip, uint64_t op, vxstate_t *state)
+{
+	struct arphdr_ether ae;
+	char *txbuf;
+	path_state_t ps;
+
+	/* get txbuf */
+	if ((txbuf = get_ingress_txbuf(&ps, state)) == NULL)
+		return;
+	ae.ae_hdr.data = op;
+	u64tomac(state->vs_ctrl_mac, ae.ae_sha);
+	/* XXX - assume v4 */
+	ae.ae_spa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
+	u64tomac(targetha, ae.ae_tha);
+	ae.ae_tpa = targetip;
+	eh_fill((struct ether_header *)txbuf, state->vs_ctrl_mac, state->vs_prov_mac,
+			ETHERTYPE_ARP);
+	memcpy(txbuf + ETHER_HDR_LEN, &ae, sizeof(struct arphdr_ether));
+	txring_next(&ps, 60);
+}
+
+void
+data_send_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state, int gratuitous)
+{
+	struct arphdr_ether *dae;
+	struct ether_vlan_header *evh, *sevh;
+	uint64_t dmac, broadcast = 0xFFFFFFFFFFFF;
+
+	sevh = (struct ether_vlan_header *)(rxbuf);
+	evh = (struct ether_vlan_header *)(txbuf);
+	/* XXX hardcoding no VLAN */
+	dae = (struct arphdr_ether *)(txbuf + ETHER_HDR_LEN);
+	if (gratuitous)
+		eh_fill((struct ether_header *)evh, state->vs_intf_mac, broadcast, ETHERTYPE_ARP);
+	else {
+		dmac = mactou64(sevh->evl_shost);
+		eh_fill((struct ether_header *)evh, state->vs_intf_mac, dmac, ETHERTYPE_ARP);
+	}
+	dae->ae_hdr.data = AE_REPLY;
+	dae->ae_spa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
+	u64tomac(state->vs_intf_mac, dae->ae_sha);
+	dae->ae_tpa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
+	u64tomac(state->vs_intf_mac, dae->ae_tha);
+	*(ps->ps_tx_len) = 60;
+}
+
 int
 cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
@@ -289,49 +422,6 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	return (0);
 }
 
-static __inline void
-eh_fill(struct ether_header *eh, uint64_t smac, uint64_t dmac, uint16_t type)
-{
-	uint16_t *d, *s;
-
-	d = (uint16_t *)(uintptr_t)eh; /* ether_dhost */
-	s = (uint16_t *)&dmac;
-	d[0] = s[0];
-	d[1] = s[1];
-	d[2] = s[2];
-	s = (uint16_t *)&smac;
-	d[3] = s[0];
-	d[4] = s[1];
-	d[5] = s[2];
-	eh->ether_type = htons(type);
-}
-
-static void
-ip_fill(struct ip *ip, uint32_t sip, uint32_t dip, uint16_t len, uint8_t proto)
-{
-	ip->ip_v = 4;
-	ip->ip_hl = (sizeof(struct ip) >> 2);
-	ip->ip_tos = 0;
-	ip->ip_len = htons(len);
-	ip->ip_id = 0;
-	ip->ip_off = htons(IP_DF);
-	ip->ip_ttl = 1;
-	ip->ip_p = proto;
-	ip->ip_sum = 0; /* XXX */
-	/* these should always be kept in network byte order (BE) */
-	ip->ip_src.s_addr = sip;
-	ip->ip_dst.s_addr = dip;
-}
-
-static void
-udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
-{
-	uh->uh_sport = htons(sport);
-	uh->uh_dport = htons(dport);
-	uh->uh_ulen = htons(len + sizeof(*uh));
-	uh->uh_sum = 0; /* XXX */
-}
-
 static void
 dhcp_fill(struct dhcp *bp, vxstate_t *state)
 {
@@ -408,7 +498,7 @@ cmd_dispatch_bp(struct dhcp *bp, vxstate_t *state)
 }
 
 int
-cmd_dispatch_ip(char *rxbuf, char *txbuf __unused, path_state_t *ps, vxstate_t *state)
+cmd_dispatch_ip(char *rxbuf, char *txbuf_ __unused, path_state_t *ps, vxstate_t *state)
 {
 	struct ip *ip = (struct ip *)(uintptr_t)(rxbuf + ETHER_HDR_LEN);
 	struct udphdr *uh = (struct udphdr *)(uintptr_t)((caddr_t)ip + (ip->ip_hl << 2));
@@ -422,75 +512,18 @@ cmd_dispatch_ip(char *rxbuf, char *txbuf __unused, path_state_t *ps, vxstate_t *
 	if (ps->ps_rx_len < sizeof(*bp) + BP_MSG_OVERHEAD)
 		return 0;
 
-	return cmd_dispatch_bp(bp, state);
-}
-
-char *
-get_ingress_txbuf(path_state_t *ps, vxstate_t *state)
-{
-	struct nm_desc *pa;
-	struct netmap_ring *txring;
-	struct netmap_slot *ts;
-
-	pa = state->vs_nm_ingress;
-	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
-	ts = &txring->slot[txring->cur];
-	ps->ps_txring = txring;
-	ps->ps_tx_len = &ts->len;
-	return NETMAP_BUF(txring, ts->buf_idx);
-}
-
-void
-txring_next(path_state_t *ps, uint16_t pktlen)
-{
-	struct netmap_ring *txring = ps->ps_txring;
-
-	*ps->ps_tx_len = pktlen;
-	txring->head = txring->cur = nm_ring_next(txring, txring->cur);
-}
-
-/*
- * Send a query to the provisioning agent
- */
-void
-data_send_arp(uint64_t targetha, uint32_t targetip, uint64_t op, vxstate_t *state)
-{
-	struct arphdr_ether ae;
-	char *txbuf;
-	path_state_t ps;
-
-	/* get txbuf */
-	if ((txbuf = get_ingress_txbuf(&ps, state)) == NULL)
-		return;
-	ae.ae_hdr.data = op;
-	u64tomac(state->vs_ctrl_mac, ae.ae_sha);
-	/* XXX - assume v4 */
-	ae.ae_spa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
-	u64tomac(targetha, ae.ae_tha);
-	ae.ae_tpa = targetip;
-	eh_fill((struct ether_header *)txbuf, state->vs_ctrl_mac, state->vs_prov_mac,
-			ETHERTYPE_ARP);
-	memcpy(txbuf + ETHER_HDR_LEN, &ae, sizeof(struct arphdr_ether));
-	txring_next(&ps, 60);
-}
-
-void
-data_send_arp_phys(char *txbuf, path_state_t *ps, vxstate_t *state)
-{
-	struct arphdr_ether *dae;
-	struct ether_vlan_header *evh;
-	uint64_t broadcast = 0xFFFFFFFFFFFF;
-
-	evh = (struct ether_vlan_header *)(txbuf);
-	/* XXX hardcoding no VLAN */
-	dae = (struct arphdr_ether *)(txbuf + ETHER_HDR_LEN);
-	eh_fill((struct ether_header *)evh, state->vs_intf_mac, broadcast, ETHERTYPE_ARP);
-	dae->ae_hdr.data = AE_REPLY;
-	dae->ae_spa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
-	u64tomac(state->vs_intf_mac, dae->ae_sha);
-	dae->ae_tpa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
-	u64tomac(state->vs_intf_mac, dae->ae_tha);
-	*(ps->ps_tx_len) = 60;
+	if (cmd_dispatch_bp(bp, state)) {
+		path_state_t psgrat;
+		bzero(&psgrat, sizeof(path_state_t));
+		char *txbuf = get_egress_txbuf(&psgrat, state);
+		/*
+		 * we have our address -- now we want to send out a
+		 * gratuitous ARP for the switch
+		 */
+		data_send_arp_phys(rxbuf, txbuf, &psgrat, state, 1);
+		txring_next(&psgrat, 60);
+	}
+	return (0);
 }
 
 /*
@@ -519,7 +552,7 @@ data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps,
 		return (0);
 
 	/* we've confirmed that it's bound for us - we need to respond */
-	data_send_arp_phys(txbuf, ps, state);
+	data_send_arp_phys(rxbuf, txbuf, ps, state, 0);
 	return (1);
 }
 
@@ -530,9 +563,61 @@ data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps,
  * - remote IP -> remote MAC when the remote IP is first learned
  */
 int
-data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps,
+data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unused,
 				  vxstate_t *state)
 {
+	struct ether_vlan_header *evh;
+	struct arphdr_ether *sae;
+	mac_vni_map_t *vnitbl = &state->vs_vni_table.mac2vni;
+	ftablemap_t *ftablemap = &state->vs_ftables;
+	int etype, hdrlen;
+	uint64_t mac;
+	uint32_t vxlanid;
+
+	evh = (struct ether_vlan_header *)rxbuf;
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
+		hdrlen = ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN;
+		etype = ntohs(evh->evl_proto);
+	} else {
+		hdrlen = ETHER_HDR_LEN;
+		etype = ntohs(evh->evl_encap_proto);
+	}
+	sae = (struct arphdr_ether *)(rxbuf + hdrlen);
+
+	/* a host local VM MAC address -- need to have vxlanid */
+	mac = mactou64(evh->evl_shost);
+	if (mac != state->vs_prov_mac) {
+		auto it_vni = vnitbl->find(mac);
+		if (it_vni == vnitbl->end()) {
+			/* request vxlanid */
+			data_send_arp(mac, 0, AE_VM_VXLANID_REQUEST, state);
+			return (0);
+		}
+	}
+
+	mac = mactou64(evh->evl_shost);
+	/* the provisioning agent responded -- should be a remote IP */
+	if (mac == state->vs_prov_mac &&
+		sae->ae_hdr.fields.ar_op == ntohs(ARPOP_REPLY)) {
+		/* check if we have an IP -> MAC mapping */
+		mac = mactou64(evh->evl_dhost);
+		auto it_vni = vnitbl->find(mac);
+		if (it_vni == vnitbl->end()) {
+			/* request vxlanid */
+			data_send_arp(mac, 0, AE_VM_VXLANID_REQUEST, state);
+			return (0);
+		}
+		vxlanid = it_vni->second;
+		auto it_ftable = ftablemap->find(vxlanid);
+		if (it_ftable == ftablemap->end()) {
+			/* send request for VXLANID */
+			data_send_arp(mac, 0, AE_VM_VXLANID_REQUEST, state);
+			return (0);
+		}
+		/* XXX -- implement a reverse lookup table for forwarding table entries */
+		data_send_arp(0, sae->ae_tpa, AE_REVREQUEST, state);
+
+	}
 	return (0);
 }
 /*
