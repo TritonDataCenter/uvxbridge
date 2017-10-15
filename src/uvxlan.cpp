@@ -370,32 +370,6 @@ cmd_dispatch_ip(char *rxbuf, char *txbuf __unused, path_state_t *ps, vxstate_t *
 	return cmd_dispatch_bp(bp, state);
 }
 
-
-#ifdef notyet
-/*
- * If rxbuf contains a neighbor discovery request return true.
- * If it's an nd request we can handle, enqueue a response.
- *
- * dir = EGRESS => VX, dir = INGRESS => PHYS
- */
-bool
-nd_request(struct arphdr_ether *sae, arphdr_ether *dae, vxstate_t &state, l2tbl_t &tbl)
-{
-#if 0
-//  XXX we assume prepopulated ARP table so ignore replies
-//	if (ae->ae_req != arpopreq && ae->ae_req != arpopreply)
-	if (sae->ae_req != arpopreq)
-		return false;
-
-	dae->ae_req = arpopreply;
-#endif
-	abort();
-	return true;
-}
-
-#endif
-
-
 static uint64_t
 mactou64(uint8_t *mac)
 {
