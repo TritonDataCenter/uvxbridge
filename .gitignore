@@ -39,3 +39,10 @@ src/dispatch_test
 
 **/*~
 **/#*#
+
+**/*.o
+**/*.po
+objs
+**/.depend
+src/uvxbridge*
+
