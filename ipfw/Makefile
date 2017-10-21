@@ -7,7 +7,8 @@
 
 # M is the current directory, used in recursive builds
 # so we allow it to be overridden
-.include "../Makefile.inc"
+.include <bsd.init.mk>
+
 VPATH= ../ipfw/extra:../ipfw/sys/netpfil/ipfw:../ipfw/sys/netinet:../ipfw/sys/net
 M ?= ${.CURDIR}
 OBJPATH = $(M)/../$(OBJDIR)
@@ -57,14 +58,15 @@ IPFW_SRCS += missing.c session.c netmap_io.c
 IPFW_CFLAGS= -DINET
 
 E_CFLAGS += -Dradix -DNEED_ROUNDUP2
-MOD := libipfw.a
 
-LIBS= -lpthread
+
 CFLAGS = $(E_CFLAGS)
+SRCS=$(IPFW_SRCS)
+LIB=ipfw
 
 IPFW_OBJS= $(IPFW_SRCS:%.c=%.o)
 
-all: include_e $(MOD)
+all: include_e libipfw.a
 
 #entries to create empty files
 EFILES+= opt_inet.h opt_ipsec.h opt_ipdivert.h \
@@ -107,15 +109,13 @@ radix.o:#	CFLAGS += -U_KERNEL
 # session.o:	CFLAGS = -O2
 nm_util.o:	CFLAGS = -O2 -Wall -Werror $(NETMAP_FLAGS)
 
-$(MOD): $(IPFW_OBJS)
-	$(MSG) "   LD $@"
-	$(HIDE)$(AR) -rc $@ $^ $(IPFW_OBJS)
+#$(MOD): $(IPFW_OBJS)
+#	$(MSG) "   LD $@"
+#	$(MSG) "TOP DIR " $(TOP_DIR)
+#	$(HIDE)$(AR) -rc $@ $^ $(IPFW_OBJS)
 
-clean:
-	-rm -f *.o $(DN) $(MOD) $(OBJDIR)/*.o
-	-rm -rf include_e
 
-diff:
-	@-(for i in $(SRCS_IPFW) ; do diff -ubw $(BSD_HEAD)/sys/netpfil/ipfw/$$i .; done)
-	@-(for i in $(SRCS_NET) ; do diff -ubw $(BSD_HEAD)/sys/net/$$i . ; done)
-	@-(for i in $(SRCS_NETINET) ; do diff -ubw $(BSD_HEAD)/sys/netinet/$$i .; done)
+#clean:
+#	-rm -f *.o $(DN) $(MOD) $(OBJDIR)/*.o
+#	-rm -rf include_e
+.include <bsd.lib.mk>

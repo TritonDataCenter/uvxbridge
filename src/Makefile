@@ -1,13 +1,8 @@
 .include "../Makefile.inc"
 
-default: all
+SRCS=main.cpp dispatch.cpp datapath.c uvxlan.cpp xxhash.c
+LDFLAGS+=-pthread
+PROG_CXX=uvxbridge
+MAN=
 
-OBJDIR=objs
-
-uvxbridge: main.o dispatch.o datapath.o uvxlan.o xxhash.o
-	$(CXX) main.o dispatch.o datapath.o uvxlan.o xxhash.o -pthread -o uvxbridge
-
-all: uvxbridge
-
-clean:
-	rm -f uvxbridge *.o *~ *.core
+.include <bsd.prog.mk>
