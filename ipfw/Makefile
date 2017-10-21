@@ -16,4 +16,3 @@ LIB=ipfw
 opt_ipsec.h:
 	(cd ../objs; $(MAKE) -f ../kipfw/Makefile include_e)
 
-#$(OBJS) : ipfw2.h ../extra/glue.h ../$(OBJDIR)/include_e
