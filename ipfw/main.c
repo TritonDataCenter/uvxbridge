@@ -590,6 +590,7 @@ ipfw_readfile(int ac, char *av[])
 	}
 }
 
+#ifdef __unused__
 int
 main(int ac, char *av[])
 {
@@ -626,3 +627,4 @@ main(int ac, char *av[])
 	}
 	return EX_OK;
 }
+#endif
