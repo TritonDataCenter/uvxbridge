@@ -57,7 +57,7 @@ IPFW_SRCS += missing.c session.c netmap_io.c
 IPFW_CFLAGS= -DINET
 
 E_CFLAGS += -Dradix -DNEED_ROUNDUP2
-MOD := kipfw
+MOD := libipfw.a
 
 LIBS= -lpthread
 CFLAGS = $(E_CFLAGS)
@@ -109,10 +109,10 @@ nm_util.o:	CFLAGS = -O2 -Wall -Werror $(NETMAP_FLAGS)
 
 $(MOD): $(IPFW_OBJS)
 	$(MSG) "   LD $@"
-	$(HIDE)$(CC) $(IPFW_OBJS) -o $@ $^ $(LIBS)
+	$(HIDE)$(AR) -rc $@ $^ $(IPFW_OBJS)
 
 clean:
-	-rm -f *.o $(DN) $(MOD)
+	-rm -f *.o $(DN) $(MOD) $(OBJDIR)/*.o
 	-rm -rf include_e
 
 diff:
