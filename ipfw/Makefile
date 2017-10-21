@@ -7,13 +7,19 @@
 
 # M is the current directory, used in recursive builds
 # so we allow it to be overridden
+.include "../Makefile.inc"
 .include <bsd.init.mk>
 
-VPATH= ../ipfw/extra:../ipfw/sys/netpfil/ipfw:../ipfw/sys/netinet:../ipfw/sys/net
+PATHS= extra sys/netpfil/ipfw sys/netinet sys/net 
+.PATH: ${PATHS:M*:S/^/${.CURDIR}\//g} 
+
 M ?= ${.CURDIR}
 OBJPATH = $(M)/../$(OBJDIR)
 
 NETMAP_FLAGS = -DWITH_NETMAP -I$(NETMAP_INC)
+
+INCDIRS = -I$(M)/../$(OBJDIR)/include_e -DEMULATE_SYSCTL
+INCDIRS += -I$(M)/sys -I$(M)/extra/sys -I$(M)/extra/sys/contrib/pf
 
 E_CFLAGS += $(INCDIRS)
 E_CFLAGS += -include $(M)/../ipfw/extra/glue.h		# headers
@@ -31,7 +37,7 @@ E_CFLAGS += -g
 E_CFLAGS += -DKERNEL_SIDE	# build the kernel side of the firewall
 E_CFLAGS += -DUSERSPACE	# communicate through userspace
 E_CFLAGS += $(EFLAGS) $(NETMAP_FLAGS)
-E_CFLAGS += . -DINET==
+E_CFLAGS += . -DINET
 E_CFLAGS += -DIPFIREWALL_DEFAULT_TO_ACCEPT
 E_CFLAGS += -D_BSD_SOURCE 
 E_CFLAGS += -D_DEFAULT_SOURCE # on glibc 2.20 and above
@@ -54,7 +60,8 @@ SRCS_NETINET	 = in_cksum.c
 IPFW_SRCS	= $(SRCS_IPFW) $(SRCS_NET) $(SRCS_NETINET)
 IPFW_SRCS += ipfw2_mod.c # bsd_compat.c
 
-IPFW_SRCS += missing.c session.c netmap_io.c
+IPFW_SRCS += missing.c netmap_io.c
+#session.c 
 IPFW_CFLAGS= -DINET
 
 E_CFLAGS += -Dradix -DNEED_ROUNDUP2
@@ -64,9 +71,7 @@ CFLAGS = $(E_CFLAGS)
 SRCS=$(IPFW_SRCS)
 LIB=ipfw
 
-IPFW_OBJS= $(IPFW_SRCS:%.c=%.o)
-
-all: include_e libipfw.a
+all: include_e 
 
 #entries to create empty files
 EFILES+= opt_inet.h opt_ipsec.h opt_ipdivert.h \
@@ -75,23 +80,22 @@ EFILES+= opt_inet.h opt_ipsec.h opt_ipdivert.h \
 	 timeconv.h
 
 EFILES += altq/if_altq.h vm/vm.h vm/vm_extern.h \
-	netpfil/pf/pf_mtag.h netinet6/ip6_var.h
+	netpfil/pf/pf_mtag.h netinet6/ip6_var.h \
+	machine/cpufunc.h
 
 EFILES_net	+= if_var.h route.h if_clone.h
 EFILES_netinet	+= in_var.h ip_var.h udp_var.h
 EFILES_sys	= proc.h sockopt.h sysctl.h \
 		mutex.h _mutex.h _rwlock.h rwlock.h \
 		eventhandler.h jail.h ktr.h rmlock.h \
-		counter.h
-#kernel.h malloc.h mbuf.h \
-#		systm.h
+		counter.h 
 
 EFILES += ${EFILES_sys:M*:S/^/sys\//g}
 EFILES += ${EFILES_net:M*:S/^/net\//g}
 EFILES += ${EFILES_netinet:M*:S/^/netinet\//g}
 
 
-EDIRS= altq net netinet netinet6 netpfil/pf sys vm
+EDIRS= altq net netinet netinet6 netpfil/pf sys vm machine
 
 include_e:
 	-@echo "Building $(OBJPATH)/include_e ..."
@@ -108,11 +112,6 @@ radix.o:#	CFLAGS += -U_KERNEL
 
 # session.o:	CFLAGS = -O2
 nm_util.o:	CFLAGS = -O2 -Wall -Werror $(NETMAP_FLAGS)
-
-#$(MOD): $(IPFW_OBJS)
-#	$(MSG) "   LD $@"
-#	$(MSG) "TOP DIR " $(TOP_DIR)
-#	$(HIDE)$(AR) -rc $@ $^ $(IPFW_OBJS)
 
 
 #clean:
