@@ -22,8 +22,8 @@ INCDIRS = -I$(M)/../$(OBJDIR)/include_e -DEMULATE_SYSCTL
 INCDIRS += -I$(M)/sys -I$(M)/extra/sys -I$(M)/extra/sys/contrib/pf
 
 E_CFLAGS += $(INCDIRS)
-E_CFLAGS += -include $(M)/../ipfw/extra/glue.h		# headers
-E_CFLAGS += -include $(M)/../ipfw/extra/missing.h		# headers
+E_CFLAGS += -include $(M)/../kipfw/extra/glue.h		# headers
+E_CFLAGS += -include $(M)/../kipfw/extra/missing.h		# headers
 E_CFLAGS += -O2 -Wall -Werror
 E_CFLAGS += -fno-strict-aliasing
 #E_CFLAGS += -pedantic # gcc 4.8.x has problems
@@ -69,7 +69,7 @@ E_CFLAGS += -Dradix -DNEED_ROUNDUP2
 
 CFLAGS = $(E_CFLAGS)
 SRCS=$(IPFW_SRCS)
-LIB=ipfw
+LIB=kipfw
 
 all: include_e 
 
@@ -104,7 +104,7 @@ include_e:
 	-$(HIDE) (cd $(OBJPATH)/include_e; mkdir -p $(EDIRS); touch $(EFILES) )
 
 
-$(IPFW_OBJS) : ../ipfw/extra/glue.h
+$(IPFW_OBJS) : ../kipfw/extra/glue.h
 
 ip_fw2.o ip_dummynet.o: # EFLAGS= -include missing.h
 

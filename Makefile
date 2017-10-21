@@ -1,7 +1,7 @@
 TOP_DIR:=${.CURDIR}
 
 .include "Makefile.inc"
-SUBDIR=ipfw
+SUBDIR=kipfw
 SUBDIR+=src
 
 .include <bsd.subdir.mk>
