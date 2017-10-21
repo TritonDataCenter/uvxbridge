@@ -715,18 +715,41 @@ sysctl_pushback(char* name, int flags, int datalen, void* data, sysctl_h_fn_t *f
 }
 #endif /* EMULATE_SYSCTL */
 
-extern int mainloop(int argc, char *argv[]);
-
 /*
- * main program for ipfw kernel side when running an userspace emulation:
- * open a socket on which we receive requests from userland,
- * another socket for calls from the 'kernel' (simulating packet
- * arrivals etc), and then periodically run the tick handler.
+ * copy data back to userland
  */
 int
-main(int argc, char *argv[])
+sooptcopyout(struct sockopt *sopt, const void *buf, size_t len)
 {
-	tick = 1000000/hz;
-	D("initializing tick to %ld", tick);
-	return mainloop(argc, argv);
+	size_t valsize = sopt->sopt_valsize;
+
+	ND("data len %d sopt_len %d", (int)len, (int)valsize);
+	if (len < valsize)
+		sopt->sopt_valsize = valsize = len;
+	bcopy(buf, sopt->sopt_val, valsize);
+	return 0;
+}
+
+int
+copyout(const void *kaddr, void *uaddr, size_t len)
+{
+	bcopy(kaddr, uaddr, len);
+	return 0; /* no fault */
+}
+
+/*
+ * copy data from userland to kernel
+ */
+int
+sooptcopyin(struct sockopt *sopt, void *buf, size_t len, size_t minlen)
+{
+	size_t valsize = sopt->sopt_valsize;
+
+	ND("have %d len %d minlen %d", (int)valsize, (int)len, (int)minlen);
+	if (valsize < minlen)
+		return EINVAL;
+	if (valsize > len)
+		sopt->sopt_valsize = valsize = len;
+	bcopy(sopt->sopt_val, buf, valsize);
+	return 0;
 }
