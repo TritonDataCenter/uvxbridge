@@ -13,7 +13,6 @@
 PATHS= extra sys/netpfil/ipfw sys/netinet sys/net 
 .PATH: ${PATHS:M*:S/^/${.CURDIR}\//g} 
 
-M ?= ${.CURDIR}
 OBJPATH = $(M)/../$(OBJDIR)
 
 NETMAP_FLAGS = -DWITH_NETMAP -I$(NETMAP_INC)
