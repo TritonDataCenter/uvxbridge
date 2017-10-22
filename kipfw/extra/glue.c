@@ -450,7 +450,7 @@ __sockopt2(struct cmd_state *s, int level, int optname, void *optval, socklen_t 
 	int new_errno;
 
 	ND("dir %d optlen %d level %d optname %d", dir, len, level, optname);
-	r.mac = s->mac;
+	memcpy(&r.mac, &s->mac, 6);
 	/* send request to the server */
 	r.optlen = htonl(len);
 	r.level = htonl(level);
