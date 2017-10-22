@@ -747,10 +747,11 @@ int ipfw_check_packet(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir, s
 int ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir, struct inpcb *inp);
 
 /* hooks for divert */
+struct ip_fw_chain;
 extern void (*ip_divert_ptr)(struct mbuf *m, int incoming);
 
 extern int (*ip_dn_ctl_ptr)(struct sockopt *);
-typedef int ip_fw_ctl_t(struct sockopt *);
+typedef int ip_fw_ctl_t(struct sockopt *, struct ip_fw_chain *);
 extern ip_fw_ctl_t *ip_fw_ctl_ptr;
 
 

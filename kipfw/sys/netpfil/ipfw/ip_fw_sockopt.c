@@ -2589,11 +2589,10 @@ ipfw_get_sopt_header(struct sockopt_data *sd, size_t needed)
  * New sockopt handler.
  */
 int
-ipfw_ctl3(struct sockopt *sopt)
+ipfw_ctl3(struct sockopt *sopt, struct ip_fw_chain *chain)
 {
 	int error, locked;
 	size_t size, valsize;
-	struct ip_fw_chain *chain;
 	char xbuf[256];
 	struct sockopt_data sdata;
 	struct ipfw_sopt_handler h;
@@ -2606,7 +2605,6 @@ ipfw_ctl3(struct sockopt *sopt)
 	if (sopt->sopt_name != IP_FW3)
 		return (ipfw_ctl(sopt));
 
-	chain = &V_layer3_chain;
 	error = 0;
 
 	/* Save original valsize before it is altered via sooptcopyin() */
