@@ -64,7 +64,7 @@ mactou64(uint8_t *mac)
 	uint16_t *src, *dst;
 
 	src = (uint16_t *)(uintptr_t)mac;
-	dst = (uint16_t *)targetha;
+	dst = (uint16_t *)&targetha;
 	dst[0] = src[0];
 	dst[1] = src[1];
 	dst[2] = src[2];
@@ -92,6 +92,8 @@ get_ingress_txbuf(path_state_t *ps, vxstate_t *state)
 
 	pa = state->vs_nm_ingress;
 	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
+	if (__predict_false(nm_ring_space(txring) == 0))
+		return (NULL);
 	ts = &txring->slot[txring->cur];
 	ps->ps_txring = txring;
 	ps->ps_tx_len = &ts->len;
@@ -105,8 +107,12 @@ get_egress_txbuf(path_state_t *ps, vxstate_t *state)
 	struct netmap_ring *txring;
 	struct netmap_slot *ts;
 
+	if (__predict_false(state->vs_nm_egress == NULL))
+		return (NULL);
 	pa = state->vs_nm_egress;
 	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
+	if (__predict_false(nm_ring_space(txring) == 0))
+		return (NULL);
 	ts = &txring->slot[txring->cur];
 	ps->ps_txring = txring;
 	ps->ps_tx_len = &ts->len;
@@ -121,6 +127,7 @@ txring_next(path_state_t *ps, uint16_t pktlen)
 	*ps->ps_tx_len = pktlen;
 	txring->head = txring->cur = nm_ring_next(txring, txring->cur);
 }
+
 static __inline void
 eh_fill(struct ether_header *eh, uint64_t smac, uint64_t dmac, uint16_t type)
 {
@@ -163,8 +170,6 @@ udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
 	uh->uh_ulen = htons(len + sizeof(*uh));
 	uh->uh_sum = 0; /* XXX */
 }
-
-
 
 /*
  * Send a query to the provisioning agent
@@ -519,9 +524,12 @@ cmd_dispatch_ip(char *rxbuf, char *txbuf_ __unused, path_state_t *ps, vxstate_t 
 		return 0;
 
 	if (cmd_dispatch_bp(bp, state)) {
+		char *txbuf;
 		path_state_t psgrat;
+
 		bzero(&psgrat, sizeof(path_state_t));
-		char *txbuf = get_egress_txbuf(&psgrat, state);
+		if ((txbuf = get_egress_txbuf(&psgrat, state)) == NULL)
+			return (0);
 		/*
 		 * we have our address -- now we want to send out a
 		 * gratuitous ARP for the switch
@@ -630,12 +638,13 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unuse
 	}
 	return (0);
 }
+
 /*
  * If valid, encapsulate rxbuf in to txbuf
  *
  */
 int
-vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
+vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 			   vxstate_dp_t *dp_state)
 {
 	struct ether_vlan_header *evh;
@@ -654,6 +663,9 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 	evh = (struct ether_vlan_header *)(rxbuf);
 	srcmac = mactou64(evh->evl_shost);
 	dstmac = mactou64(evh->evl_dhost);
+	/* ignore our own traffic */
+	if (__predict_false(srcmac == state->vs_ctrl_mac))
+		return (0);
 	if (dp_state->vsd_ecache.ec_smac == srcmac &&
 		dp_state->vsd_ecache.ec_dmac == dstmac) {
 		/* XXX VLAN only */
@@ -706,7 +718,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 		/* send request for VXLANID */
 		return (0);
 	}
-	targetha = mactou64(evh->evl_shost);
+	targetha = mactou64(evh->evl_dhost);
 	auto it_fte = it_ftable->second.find(targetha);
 	if (it_fte != it_ftable->second.end()) {
 		raddr = it_fte->second.vfe_raddr.in4.s_addr;
@@ -752,6 +764,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 	memcpy(&dp_state->vsd_ecache, &ec, sizeof(struct egress_cache));
 	memcpy(txbuf, &ec.ec_hdr, sizeof(struct vxlan_header));
 	nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
+	*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
     return (1);
 }
 
@@ -765,16 +778,20 @@ vxlan_decap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 	uint64_t dmac = mactou64(eh->ether_dhost);
 	vxstate_t *state = dp_state->vsd_state;
 	mac_vni_map_t &vnimap = state->vs_vni_table.mac2vni;
+	uint16_t pktlen;
+	vnient_t ent;
 
 	auto it = vnimap.find(dmac);
 	/* we have no knowledge of this MAC address */
 	if (it == vnimap.end())
 		return (0);
+	ent.data = it->second;
 	/* this MAC address isn't on the VXLAN that we were addressed with */
-	if (it->second != rxvxlanid)
+	if (ent.fields.vxlanid != rxvxlanid)
 		return (0);
 	/* copy encapsulated packet */
-	nm_pkt_copy(rxbuf, txbuf + sizeof(*vh), ps->ps_rx_len);
-
+	pktlen = ps->ps_rx_len -  sizeof(struct vxlan_header);
+	nm_pkt_copy(rxbuf + sizeof(*vh), txbuf, pktlen);
+	*(ps->ps_tx_len) = pktlen;
 	return (1);
 }

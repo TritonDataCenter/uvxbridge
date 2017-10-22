@@ -45,6 +45,7 @@
 #include "uvxlan.h"
 #include "datapath.h"
 extern int debug;
+extern int test;
 
 #ifdef old
 static int
@@ -185,14 +186,14 @@ cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 	etype = ntohs(eh->ether_type);
 	dmac = le64toh(*(uint64_t *)(uintptr_t)(rxbuf))& 0xffffffffffff;
 
-	/* XXX check source mac too */
-	if (dmac != vs->vs_ctrl_mac && debug < 2) {
-		D("received control message to %lx expect %lx",
-		  dmac, vs->vs_ctrl_mac);
-		return 0;
+	if (dmac != vs->vs_ctrl_mac) {
+		if (debug)
+			D("received control message to %lx expect %lx",	
+			  dmac, vs->vs_ctrl_mac);
+		/* XXX check source mac too */
+		if (debug < 2)
+			return 0;
 	}
-	if (debug >= 2)
-		D("DISPATCHING");
 	switch(etype) {
 		case ETHERTYPE_ARP:
 			return cmd_dispatch_arp(rxbuf, txbuf, ps, vs);
@@ -202,6 +203,7 @@ cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 				return 1;
 			break;
 		default:
+			D("%s unrecognized packet type %x len: %d\n", __func__, etype, ps->ps_rx_len);
 			/* we only support ipv4 - XXX */
 			/* UNHANDLED */;
 	}
@@ -214,7 +216,7 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 	vxstate_t *oldstate, *newstate, *state = (vxstate_t *)arg;
 	rte_t *rte = &state->vs_dflt_rte;
 	struct timeval tnow, delta;
-	int dp_count;
+	int dp_count, count = 0;
 
 	gettimeofday(&tnow, NULL);
 	timersub(&tnow, &state->vs_tlast, &delta);
@@ -223,11 +225,13 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 	state->vs_tlast.tv_sec = tnow.tv_sec;
 	state->vs_tlast.tv_usec = tnow.tv_usec;
 
-	if (rte->ri_flags & RI_VALID)
-		cmd_send_heartbeat(rxbuf, txbuf, ps, state);
-	else
-		cmd_send_dhcp(rxbuf, txbuf, ps, state);
-
+	if (__predict_true(test == 0)) {
+		if (rte->ri_flags & RI_VALID)
+			cmd_send_heartbeat(rxbuf, txbuf, ps, state);
+		else
+			cmd_send_dhcp(rxbuf, txbuf, ps, state);
+		count = 1;
+	}
 	/* update all datapath threads with a copy of the latest state */
 	dp_count = state->vs_datapath_count;
 	if (dp_count) {
@@ -236,9 +240,13 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 		for (int i = 0; i < dp_count; i++)
 			state->vs_dp_states[i]->vsd_state = newstate;
 		/* XXX --- clunky LOLEBR --- sleep for 50ms before freeing */
-		usleep(50000);
+		if (__predict_true(debug == 0)) {
+			usleep(50000);
+			if (__predict_false(oldstate != state))
+				delete oldstate;
+		}
 	}
-	return (1);
+	return (count);
 }
 
 
@@ -265,7 +273,7 @@ ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state
 			/* not yet supported */
 			break;
 		default:
-			printf("unrecognized packet type %x\n", etype);
+			printf("%s unrecognized packet type %x len: %d\n", __func__, etype, ps->ps_rx_len);
 			break;
 	}
 	return (0);
@@ -294,7 +302,7 @@ egress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
 			/* not yet supported */
 			break;
 		default:
-			printf("unrecognized packet type %x\n", etype);
+			printf("%s unrecognized packet type %x len: %d\n", __func__, etype, ps->ps_rx_len);
 			break;
 	}
 	return (0);

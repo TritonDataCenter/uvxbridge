@@ -207,22 +207,25 @@ do_tx(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t tx_dispatch, void *
 
 	/* transmit on port A */
 	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
-	k = txring->cur;
-	ts = &txring->slot[k];
-	ps.ps_tx_len = &ts->len;
-	txbuf = NETMAP_BUF(txring, ts->buf_idx);
-	ps.ps_dir = AtoB;
-	ps.ps_txring = txring;
+	if (nm_ring_space(txring)) {
+		k = txring->cur;
+		ts = &txring->slot[k];
+		ps.ps_tx_len = &ts->len;
+		txbuf = NETMAP_BUF(txring, ts->buf_idx);
+		ps.ps_dir = AtoB;
+		ps.ps_txring = txring;
 
-	if (tx_dispatch(NULL, txbuf, &ps, arg))
-		k = nm_ring_next(txring, k);
-	txring->head = txring->cur = k;
+		if (tx_dispatch(NULL, txbuf, &ps, arg))
+			k = nm_ring_next(txring, k);
+		txring->head = txring->cur = k;
 
-	if (pa == pb)
-		return;
-
+		if (pa == pb)
+			return;
+	}
 	/* transmit on port B */
 	txring = NETMAP_TXRING(pb->nifp, pb->first_tx_ring);
+	if (!nm_ring_space(txring))
+		return;
 	k = txring->cur;
 	ts = &txring->slot[k];
 	txbuf = NETMAP_BUF(txring, ts->buf_idx);

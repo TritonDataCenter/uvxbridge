@@ -45,6 +45,7 @@
 #include <machine/atomic.h>
 
 int debug;
+int test;
 
 static void
 usage(char *name)
@@ -126,13 +127,13 @@ main(int argc, char *const argv[])
 {
 	int ch;
 	char *ingress, *egress, *config, *log;
-	uint32_t icount, ecount, testcase;
+	uint32_t icount, ecount;
 	uint64_t pmac, cmac;
 	vxstate_t *state;
 	dp_args_t cmd_port_args;
 
 	ingress = egress = config = NULL;
-	testcase = ecount = icount = pmac = cmac = 0;
+	test = ecount = icount = pmac = cmac = 0;
 	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:d:t:")) != -1) {
 		switch (ch) {
 			case 'i':
@@ -159,22 +160,22 @@ main(int argc, char *const argv[])
 				debug = strtol(optarg, NULL, 10);
 				break;
 			case 't':
-				testcase = strtol(optarg, NULL, 10);
+				test = strtol(optarg, NULL, 10);
 				break;
 			case '?':
 			default:
 				usage(argv[0]);
 		}
 	}
-	if (pmac == 0) {
+	if (pmac == 0 && !test) {
 		printf("missing provisioning agent mac address\n");
 		usage(argv[0]);
 	}
-	if (cmac == 0) {
+	if (cmac == 0 && !test) {
 		printf("missing bridge configuration mac address\n");
 		usage(argv[0]);
 	}
-	if (config == NULL) {
+	if (config == NULL && !test) {
 		printf("missing config netmap interface\n");
 		usage(argv[0]);
 	}
@@ -191,14 +192,18 @@ main(int argc, char *const argv[])
 		usage(argv[0]);
 	}
 
-	state = new vxstate_t(pmac, cmac, icount);
-	if (testcase == 1) {
+	state = new vxstate_t(pmac, cmac);
+	if (test == 1) {
 		configure_beastie0(state);
-	} else if (testcase == 2) {
+	} else if (test == 2) {
 		configure_beastie1(state);
 	}
 	for (uint32_t i = 0; i < icount; i++)
 		start_datapath(ingress, egress, state, i);
+	if (config == NULL) {
+		while (1)
+			sleep(1);
+	}
 	/* yield for 50ms intervals until all threads have started */
 	while (state->vs_datapath_count != icount)
 		usleep(50000);
@@ -210,6 +215,9 @@ main(int argc, char *const argv[])
 	cmd_port_args.da_rx_dispatch = cmd_dispatch;
 	cmd_port_args.da_tx_dispatch = cmd_initiate;
 	cmd_port_args.da_poll_timeout = 1000;
+
+	printf("ctrl_mac: %lx\n", state->vs_ctrl_mac);
 	run_datapath(&cmd_port_args, state);
+
 	return 0;
 }

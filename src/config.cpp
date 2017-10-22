@@ -39,12 +39,14 @@ mac_parse(const char *input)
  * vxlan:	00:a0:98:69:52:53 -> 150
  * ftable:	00:a0:98:11:1c:d8 -> 192.168.2.2
  * physarp:	192.168.2.2 -> BA:DB:AB:EC:AF:E2
- * 
+ *
+ * ./uvxbridge -c vale0:1 -i vale0:2 -e vale2:0 -m CA:FE:00:00:BE:EF -p CA:FE:00:00:BA:BE -t 1
+ *
  * beastie1:
  *
  * config:	vale1:1
- * ingress:	vale2:1
- * egress:	vale1:2
+ * ingress:	vale1:2
+ * egress:	vale2:1
  * cmac:	CA:FE:00:01:BE:EF
  * pmac:	CA:FE:00:01:BA:BE
  *
@@ -53,6 +55,9 @@ mac_parse(const char *input)
  * vxlan:	00:a0:98:11:1c:d8 -> 150
  * ftable:	00:a0:98:69:52:53 -> 192.168.2.1
  * physarp:	192.168.2.1 -> BA:DB:AB:EC:AF:E1
+ *
+ * ./uvxbridge -c vale1:1 -i vale1:2 -e vale2:1 -m CA:FE:00:01:BE:EF -p CA:FE:00:01:BA:BE -t 2
+ *
  */
 
 void
@@ -66,21 +71,25 @@ configure_beastie0(vxstate_t *state)
 	uint64_t ptnet_mac0, ptnet_mac1, physarp;
 	vfe_t vfe;
 	vnient_t vnient;
-	uint32_t vxlanid = ntohl(150);
+	uint32_t vxlanid = ntohl(150) >> 8;
 	uint32_t peerip;
 
 	state->vs_intf_mac = mac_parse("BA:DB:AB:EC:AF:E1");
-	rte->ri_mask.in4.s_addr = ntohl(0xffffff00);
+	rte->ri_mask.in4.s_addr = 0xffffff00;
 	rte->ri_laddr.in4.s_addr = inet_network("192.168.2.1");
 	rte->ri_raddr.in4.s_addr = inet_network("192.168.2.254");
+	rte->ri_prefixlen = 24;
+	rte->ri_flags = RI_VALID;
 	ptnet_mac0 = mac_parse("00:a0:98:69:52:53");
 	ptnet_mac1 = mac_parse("00:a0:98:11:1c:d8");
 
 	vnient.data = 0;
 	vnient.fields.vxlanid = vxlanid;
 	vnitbl->insert(u64pair(ptnet_mac0, vnient.data));
+	vnitbl->insert(u64pair(ptnet_mac1, vnient.data));
 	bzero(&vfe, sizeof(vfe_t));
 	vfe.vfe_raddr.in4.s_addr = inet_network("192.168.2.2");
+	/* map beastie1 mac to 'host' for beastie1 */
 	ftable.insert(pair<uint64_t, vfe_t>(ptnet_mac1, vfe));
 	ftablemap->insert(pair<uint32_t, ftable_t>(vxlanid, ftable));
 	physarp = mac_parse("BA:DB:AB:EC:AF:E2");
@@ -99,22 +108,25 @@ configure_beastie1(vxstate_t *state)
 	uint64_t ptnet_mac0, ptnet_mac1, physarp;
 	vfe_t vfe;
 	vnient_t vnient;
-	uint32_t vxlanid = ntohl(150);
+	uint32_t vxlanid = ntohl(150) >> 8;
 	uint32_t peerip;
 
 	state->vs_intf_mac = mac_parse("BA:DB:AB:EC:AF:E2");
-	rte->ri_mask.in4.s_addr = ntohl(0xffffff00);
+	rte->ri_mask.in4.s_addr = 0xffffff00;
 	rte->ri_laddr.in4.s_addr = inet_network("192.168.2.2");
 	rte->ri_raddr.in4.s_addr = inet_network("192.168.2.254");
+	rte->ri_prefixlen = 24;
+	rte->ri_flags = RI_VALID;
 	ptnet_mac0 = mac_parse("00:a0:98:69:52:53");
 	ptnet_mac1 = mac_parse("00:a0:98:11:1c:d8");
 
 	vnient.data = 0;
 	vnient.fields.vxlanid = vxlanid;
+	vnitbl->insert(u64pair(ptnet_mac0, vnient.data));
 	vnitbl->insert(u64pair(ptnet_mac1, vnient.data));
 	bzero(&vfe, sizeof(vfe_t));
 	vfe.vfe_raddr.in4.s_addr = inet_network("192.168.2.1");
-	ftable.insert(pair<uint64_t, vfe_t>(ptnet_mac1, vfe));
+	ftable.insert(pair<uint64_t, vfe_t>(ptnet_mac0, vfe));
 	ftablemap->insert(pair<uint32_t, ftable_t>(vxlanid, ftable));
 	physarp = mac_parse("BA:DB:AB:EC:AF:E1");
 	peerip = inet_network("192.168.2.1");
