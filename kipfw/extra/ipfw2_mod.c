@@ -56,6 +56,22 @@
 
 #include <netpfil/ipfw/ip_fw_private.h>		/* ip_fw_ctl_t, ip_fw_chk_t */
 
+
+struct ip_fw_chain *
+ip_fw_chain_new(void)
+{
+	return calloc(sizeof(struct ip_fw_chain *), 1);
+}
+
+void
+ip_fw_chain_destroy(struct ip_fw_chain *chain)
+{
+	if (chain == NULL)
+		return;
+	/* do any teardown */
+	kern_free(chain);
+}
+
 /*
  * Here we allocate some global variables used in the firewall.
  */
