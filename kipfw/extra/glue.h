@@ -47,6 +47,7 @@
 
 #include <stdint.h>	/* linux needs it in addition to sys/types.h */
 #include <sys/types.h>	/* for size_t */
+#include "ipfw_exports.h"
 
 #define true 1		/* stdbool */
 #ifdef _KERNEL		/* prevent a warning */

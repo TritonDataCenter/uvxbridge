@@ -402,15 +402,6 @@ sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp,
  */
 enum sock_type {GET_SOCKOPT, SET_SOCKOPT};
 
-struct wire_hdr {
-	uint64_t mac:48;
-	uint64_t pad:16;
-	uint32_t optlen;	/* actual data len */
-	uint32_t level;		/* or error */
-	uint32_t optname;	/* or act len */
-	uint32_t dir;		/* in or out */
-};
-
 #ifdef __unused__
 /* do a complete write of the buffer */
 static int
@@ -454,7 +445,7 @@ int
 __sockopt2(struct cmd_state *s, int level, int optname, void *optval, socklen_t *optlen,
    enum sopt_dir dir)
 {
-	struct wire_hdr r;
+	struct ipfw_wire_hdr r;
 	int len = optlen && optval ? *optlen : 0;
 	int new_errno;
 
