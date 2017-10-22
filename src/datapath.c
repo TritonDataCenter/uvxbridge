@@ -207,22 +207,25 @@ do_tx(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t tx_dispatch, void *
 
 	/* transmit on port A */
 	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
-	k = txring->cur;
-	ts = &txring->slot[k];
-	ps.ps_tx_len = &ts->len;
-	txbuf = NETMAP_BUF(txring, ts->buf_idx);
-	ps.ps_dir = AtoB;
-	ps.ps_txring = txring;
+	if (nm_ring_space(txring)) {
+		k = txring->cur;
+		ts = &txring->slot[k];
+		ps.ps_tx_len = &ts->len;
+		txbuf = NETMAP_BUF(txring, ts->buf_idx);
+		ps.ps_dir = AtoB;
+		ps.ps_txring = txring;
 
-	if (tx_dispatch(NULL, txbuf, &ps, arg))
-		k = nm_ring_next(txring, k);
-	txring->head = txring->cur = k;
+		if (tx_dispatch(NULL, txbuf, &ps, arg))
+			k = nm_ring_next(txring, k);
+		txring->head = txring->cur = k;
 
-	if (pa == pb)
-		return;
-
+		if (pa == pb)
+			return;
+	}
 	/* transmit on port B */
 	txring = NETMAP_TXRING(pb->nifp, pb->first_tx_ring);
+	if (!nm_ring_space(txring))
+		return;
 	k = txring->cur;
 	ts = &txring->slot[k];
 	txbuf = NETMAP_BUF(txring, ts->buf_idx);
@@ -237,7 +240,7 @@ do_tx(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t tx_dispatch, void *
 // pa = host; pb = egress
 static int
 run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t rx_dispatch,
-				  pkt_dispatch_t tx_dispatch, int timeout, void *arg)
+				  pkt_dispatch_t tx_dispatch, int timeout, int idx __unused, void *arg)
 {
     struct pollfd pollfd[2];
     u_int burst = 1024, wait_link = 2;
@@ -349,6 +352,14 @@ run_datapath(dp_args_t *port_args, void *arg)
 	if (port_args->da_flags & DA_DEBUG)
 		verbose = 1;
 
+	if (port_args->da_idx != 0) {
+		pa = *port_args->da_pa;
+		pb = *port_args->da_pb;
+		return run_datapath_priv(pa, pb, rx_dispatch, tx_dispatch,
+								 port_args->da_poll_timeout, port_args->da_idx,
+								 arg);
+	}
+
     pa_name = port_args->da_pa_name;
     pb_name = port_args->da_pb_name;
 
@@ -370,5 +381,5 @@ run_datapath(dp_args_t *port_args, void *arg)
     } else
 		pb = pa;
     return run_datapath_priv(pa, pb, rx_dispatch, tx_dispatch,
-							 port_args->da_poll_timeout, arg);
+							 port_args->da_poll_timeout, 0, arg);
 }

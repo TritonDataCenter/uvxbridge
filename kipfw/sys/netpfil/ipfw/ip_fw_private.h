@@ -519,7 +519,7 @@ void ipfw_iface_del_notify(struct ip_fw_chain *ch, struct ipfw_ifc *ic);
 void ipfw_init_skipto_cache(struct ip_fw_chain *chain);
 void ipfw_destroy_skipto_cache(struct ip_fw_chain *chain);
 int ipfw_find_rule(struct ip_fw_chain *chain, uint32_t key, uint32_t id);
-int ipfw_ctl3(struct sockopt *sopt);
+int ipfw_ctl3(struct sockopt *sopt, struct ip_fw_chain *chain);
 int ipfw_chk(struct ip_fw_args *args);
 void ipfw_reap_add(struct ip_fw_chain *chain, struct ip_fw **head,
     struct ip_fw *rule);

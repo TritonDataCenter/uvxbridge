@@ -75,6 +75,7 @@ void (*ip_divert_ptr)(struct mbuf *m, int incoming);
 ng_ipfw_input_t *ng_ipfw_input_p = NULL;
 
 
+#ifdef __linux__
 /*---
  * Control hooks:
  * ipfw_ctl_h() is a wrapper for linux to FreeBSD sockopt call convention.
@@ -133,7 +134,7 @@ do_ipfw_get_ctl(void *sk,
 	*len = s.sopt_valsize;	/* return lenght back to the caller */
 	return ret;
 }
-
+#endif /* __linux__ */
 
 /*
  * Module glue - init and exit function.

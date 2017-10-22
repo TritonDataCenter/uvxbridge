@@ -46,3 +46,5 @@ objs
 **/.depend
 src/uvxbridge*
 
+cscope.*
+

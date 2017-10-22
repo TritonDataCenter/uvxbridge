@@ -37,7 +37,9 @@
  
 #ifndef _GLUE_H
 #define	_GLUE_H
-
+#ifdef __cplusplus
+extern "C" {
+#endif
 /*
  * common definitions to allow portability
  */
@@ -47,6 +49,7 @@
 
 #include <stdint.h>	/* linux needs it in addition to sys/types.h */
 #include <sys/types.h>	/* for size_t */
+#include "ipfw_exports.h"
 
 #define true 1		/* stdbool */
 #ifdef _KERNEL		/* prevent a warning */
@@ -299,8 +302,15 @@ int do_connect(const char *addr, int port);
 #define socket(a, b, c) do_connect(LOCALADDR, IPFW_PORT)
 #define setsockopt      setsockopt2
 #define getsockopt      getsockopt2
-int getsockopt2(int s, int lev, int optname, void *optval, socklen_t *optlen);
-int setsockopt2(int s, int lev, int optname, void *optval, socklen_t optlen);
+
+struct cmd_state {
+	/* netmap state */
+	struct nm_desc *desc;
+	/* mac address we're current operating on */
+	uint64_t mac;
+};
+int getsockopt2(struct cmd_state *s, int lev, int optname, void *optval, socklen_t *optlen);
+int setsockopt2(struct cmd_state *s, int lev, int optname, void *optval, socklen_t optlen);
 #endif /* KERNEL_SIDE */
 
 #endif	/* USERSPACE */
@@ -465,24 +475,28 @@ struct in_addr;
 static inline void
 _pkt_copy(const void *_src, void *_dst, int l)
 {
-        const uint64_t *src = _src;
-        uint64_t *dst = _dst;
+	const uint64_t *src = (uint64_t *)(uintptr_t)_src;
+	uint64_t *dst = (uint64_t *)(uintptr_t)_dst;
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)       __builtin_expect(!!(x), 0)
-        if (unlikely(l >= 1024)) {
-                bcopy(src, dst, l);
-                return;
-        }
-        for (; l > 0; l-=64) {
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-        }
+	if (unlikely(l >= 1024)) {
+		bcopy(src, dst, l);
+		return;
+	}
+	for (; l > 0; l-=64) {
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+	}
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_GLUE_H */

@@ -60,6 +60,8 @@ struct dhcp {
 #define	IPPORT_STATPS			665 /* Sun DR */
 #define	IPPORT_STATPC			666 /* DOOM */
 
+#define IPPORT_IPFWPS			6666 /* unused */
+
 #define VXLAN_DPORT	4789
 
 /*

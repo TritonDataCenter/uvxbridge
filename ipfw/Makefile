@@ -9,6 +9,7 @@ SRCS= ipfw2.c dummynet.c main.c ipv6.c altq.c tables.c glue.c opt_ipsec.h
 LDFLAGS += -lutil # expand_number and humanize_number
 CFLAGS += $(INCDIRS)
 CFLAGS += -DUSERSPACE	# communicate through userspace
+CFLAGS += -Wno-cast-align -Wno-unused-parameter -Wno-sign-compare -Wno-cast-qual
 
 LIB=ipfw
 

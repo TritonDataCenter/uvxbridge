@@ -27,12 +27,13 @@
  */
 
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <stdio.h>
 
 #include <net/ethernet.h>
 #define NETMAP_WITH_LIBS
 #include <net/netmap_user.h>
-#include <sys/poll.h>
+#include <ipfw_exports.h>
 
 #include "uvxbridge.h"
 #include "uvxlan.h"
@@ -53,6 +54,8 @@
 #define AE_VM_VLANID_REQUEST_ALL	0x1000040600080100UL
 #define AE_VM_VLANID_REPLY	0x1100040600080100UL
 
+typedef int ip_fw_ctl_t(struct sockopt *, struct ip_fw_chain *);
+extern ip_fw_ctl_t *ip_fw_ctl_ptr;
 
 #define A(val) printf("got %s\n", #val)
 extern int debug;
@@ -64,7 +67,7 @@ mactou64(uint8_t *mac)
 	uint16_t *src, *dst;
 
 	src = (uint16_t *)(uintptr_t)mac;
-	dst = (uint16_t *)targetha;
+	dst = (uint16_t *)&targetha;
 	dst[0] = src[0];
 	dst[1] = src[1];
 	dst[2] = src[2];
@@ -92,6 +95,8 @@ get_ingress_txbuf(path_state_t *ps, vxstate_t *state)
 
 	pa = state->vs_nm_ingress;
 	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
+	if (__predict_false(nm_ring_space(txring) == 0))
+		return (NULL);
 	ts = &txring->slot[txring->cur];
 	ps->ps_txring = txring;
 	ps->ps_tx_len = &ts->len;
@@ -105,8 +110,12 @@ get_egress_txbuf(path_state_t *ps, vxstate_t *state)
 	struct netmap_ring *txring;
 	struct netmap_slot *ts;
 
+	if (__predict_false(state->vs_nm_egress == NULL))
+		return (NULL);
 	pa = state->vs_nm_egress;
 	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
+	if (__predict_false(nm_ring_space(txring) == 0))
+		return (NULL);
 	ts = &txring->slot[txring->cur];
 	ps->ps_txring = txring;
 	ps->ps_tx_len = &ts->len;
@@ -121,6 +130,7 @@ txring_next(path_state_t *ps, uint16_t pktlen)
 	*ps->ps_tx_len = pktlen;
 	txring->head = txring->cur = nm_ring_next(txring, txring->cur);
 }
+
 static __inline void
 eh_fill(struct ether_header *eh, uint64_t smac, uint64_t dmac, uint16_t type)
 {
@@ -163,8 +173,6 @@ udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
 	uh->uh_ulen = htons(len + sizeof(*uh));
 	uh->uh_sum = 0; /* XXX */
 }
-
-
 
 /*
  * Send a query to the provisioning agent
@@ -464,7 +472,9 @@ cmd_send_dhcp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *st
 static void
 uvxstat_fill(struct uvxstat *stat, vxstate_t *state)
 {
-	memcpy(stat, &state->vs_stats, sizeof(*stat));
+	/* XXX -- only supports one datapath */
+	if (state->vs_datapath_count)
+		memcpy(stat, &state->vs_dp_states[0]->vsd_stats, sizeof(*stat));
 }
 
 int
@@ -501,33 +511,127 @@ cmd_dispatch_bp(struct dhcp *bp, vxstate_t *state)
 	return (1);
 }
 
+/*
+ * generic handler for sockopt functions
+ */
+static int
+ctl_handler(struct sockopt *sopt, struct ip_fw_chain *chain)
+{
+	int error = EINVAL;
+
+	ND("called, level %d", sopt->sopt_level);
+	if (sopt->sopt_level != IPPROTO_IP)
+		return (EINVAL);
+	switch (sopt->sopt_name) {
+	default:
+		D("command not recognised %d", sopt->sopt_name);
+		break;
+	case IP_FW3: // XXX untested
+	case IP_FW_ADD: /* ADD actually returns the body... */
+	case IP_FW_GET:
+	case IP_FW_DEL:
+	case IP_FW_TABLE_GETSIZE:
+	case IP_FW_TABLE_LIST:
+	case IP_FW_NAT_GET_CONFIG:
+	case IP_FW_NAT_GET_LOG:
+	case IP_FW_FLUSH:
+	case IP_FW_ZERO:
+	case IP_FW_RESETLOG:
+	case IP_FW_TABLE_ADD:
+	case IP_FW_TABLE_DEL:
+	case IP_FW_TABLE_FLUSH:
+	case IP_FW_NAT_CFG:
+	case IP_FW_NAT_DEL:
+		if (ip_fw_ctl_ptr != NULL)
+			error = ip_fw_ctl_ptr(sopt, chain);
+		else {
+			D("ipfw not enabled");
+			error = ENOPROTOOPT;
+		}
+		break;
+#ifdef __unused__
+	case IP_DUMMYNET_GET:
+	case IP_DUMMYNET_CONFIGURE:
+	case IP_DUMMYNET_DEL:
+	case IP_DUMMYNET_FLUSH:
+	case IP_DUMMYNET3:
+		if (ip_dn_ctl_ptr != NULL)
+			error = ip_dn_ctl_ptr(sopt);
+		else
+			error = ENOPROTOOPT;
+		break ;
+#endif
+	}
+	ND("returning error %d", error);
+	return error;
+}
+
 int
-cmd_dispatch_ip(char *rxbuf, char *txbuf_ __unused, path_state_t *ps, vxstate_t *state)
+cmd_dispatch_ipfw(struct ipfw_wire_hdr *ipfw, char *txbuf, vxstate_t *state)
+{
+	struct thread dummy;
+	socklen_t optlen;
+	uint64_t mac;
+	int optname, level, rc;
+	struct sockopt sopt;
+	enum sopt_dir dir;
+	void *optval  = (void *)(uintptr_t)(ipfw + 1);
+	struct ip_fw_chain *chain = NULL;
+
+	sopt.sopt_dir = (enum sopt_dir)ipfw->dir;
+	sopt.sopt_level = ipfw->level;
+	sopt.sopt_val = optval;
+	sopt.sopt_name = ipfw->optname;
+	sopt.sopt_valsize = ipfw->optlen;
+	sopt.sopt_td = &dummy;
+	mac = ((uint64_t)ipfw->mac) & 0xFFFFFFFFFFFF;
+	/* lookup mac in state to get chain */
+	if (0 /* if found call ctl_handler with chain */ ) {
+		ctl_handler(&sopt, chain);
+		/* now respond with any changes to sopt depending on direction */
+
+		/* populate header */
+		return (1);
+	} else {
+		D("ipfw command dispatch not yet complete");
+	}
+	return (0);
+}
+
+int
+cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
 	struct ip *ip = (struct ip *)(uintptr_t)(rxbuf + ETHER_HDR_LEN);
 	struct udphdr *uh = (struct udphdr *)(uintptr_t)((caddr_t)ip + (ip->ip_hl << 2));
 	struct dhcp *bp = (struct dhcp *)(uintptr_t)(uh + 1);
+	struct ipfw_wire_hdr *ipfw = (struct ipfw_wire_hdr *)(uintptr_t)(uh + 1);
+	uint16_t dport;
 	/* validate ip header */
 
 	/* validate the UDP header */
-
+	dport = ntohs(uh->uh_dport);
 
 	/* we're only supporting a BOOTP response for the moment */
 	if (ps->ps_rx_len < sizeof(*bp) + BP_MSG_OVERHEAD)
 		return 0;
 
-	if (cmd_dispatch_bp(bp, state)) {
+	if (dport == IPPORT_BOOTPS && cmd_dispatch_bp(bp, state)) {
+		char *txbuf_;
 		path_state_t psgrat;
+
 		bzero(&psgrat, sizeof(path_state_t));
-		char *txbuf = get_egress_txbuf(&psgrat, state);
+		if ((txbuf_ = get_egress_txbuf(&psgrat, state)) == NULL)
+			return (0);
 		/*
 		 * we have our address -- now we want to send out a
 		 * gratuitous ARP for the switch
 		 */
-		data_send_arp_phys(rxbuf, txbuf, &psgrat, state, 1);
+		data_send_arp_phys(rxbuf, txbuf_, &psgrat, state, 1);
 		txring_next(&psgrat, 60);
 		/* XXX proactively resolve the MAC address for the gateway */
 		/* ... */
+	} else if (dport == IPPORT_IPFWPS) {
+		return cmd_dispatch_ipfw(ipfw, txbuf, state);
 	}
 	return (0);
 }
@@ -537,8 +641,9 @@ cmd_dispatch_ip(char *rxbuf, char *txbuf_ __unused, path_state_t *ps, vxstate_t 
  */
 int
 data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps,
-				  vxstate_t *state)
+				  vxstate_dp_t *dp_state)
 {
+	vxstate_t *state = dp_state->vsd_state;
 	struct arphdr_ether *sah;
 	struct ether_vlan_header *evh;
 	int etype, hdrlen;
@@ -570,10 +675,11 @@ data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps,
  */
 int
 data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unused,
-				  vxstate_t *state)
+				  vxstate_dp_t *dp_state)
 {
 	struct ether_vlan_header *evh;
 	struct arphdr_ether *sae;
+	vxstate_t *state = dp_state->vsd_state;
 	mac_vni_map_t *vnitbl = &state->vs_vni_table.mac2vni;
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	int etype, hdrlen;
@@ -626,16 +732,18 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unuse
 	}
 	return (0);
 }
+
 /*
  * If valid, encapsulate rxbuf in to txbuf
  *
  */
 int
-vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
-			   vxstate_t *state)
+vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
+			   vxstate_dp_t *dp_state)
 {
 	struct ether_vlan_header *evh;
 	int hdrlen, etype;
+	vxstate_t *state = dp_state->vsd_state;
 	mac_vni_map_t *vnitbl = &state->vs_vni_table.mac2vni;
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	rte_t *rte = &state->vs_dflt_rte;
@@ -649,10 +757,13 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 	evh = (struct ether_vlan_header *)(rxbuf);
 	srcmac = mactou64(evh->evl_shost);
 	dstmac = mactou64(evh->evl_dhost);
-	if (state->vs_ecache.ec_smac == srcmac &&
-		state->vs_ecache.ec_dmac == dstmac) {
+	/* ignore our own traffic */
+	if (__predict_false(srcmac == state->vs_ctrl_mac))
+		return (0);
+	if (dp_state->vsd_ecache.ec_smac == srcmac &&
+		dp_state->vsd_ecache.ec_dmac == dstmac) {
 		/* XXX VLAN only */
-		memcpy(txbuf, &state->vs_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
+		memcpy(txbuf, &dp_state->vsd_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
 		nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
 		*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
 		return (1);
@@ -701,7 +812,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 		/* send request for VXLANID */
 		return (0);
 	}
-	targetha = mactou64(evh->evl_shost);
+	targetha = mactou64(evh->evl_dhost);
 	auto it_fte = it_ftable->second.find(targetha);
 	if (it_fte != it_ftable->second.end()) {
 		raddr = it_fte->second.vfe_raddr.in4.s_addr;
@@ -744,31 +855,37 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 		dstmac = it->second;
 	}
 	eh_fill(&ec.ec_hdr.vh.vh_ehdr, state->vs_intf_mac, dstmac, ETHERTYPE_IP);
-	memcpy(&state->vs_ecache, &ec, sizeof(struct egress_cache));
+	memcpy(&dp_state->vsd_ecache, &ec, sizeof(struct egress_cache));
 	memcpy(txbuf, &ec.ec_hdr, sizeof(struct vxlan_header));
 	nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
+	*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
     return (1);
 }
 
 int
 vxlan_decap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
-			   vxstate_t *state)
+			   vxstate_dp_t *dp_state)
 {
 	struct vxlan_header *vh = (struct vxlan_header *)rxbuf;
 	uint32_t rxvxlanid = vh->vh_vxlanhdr.v_vxlanid;
 	struct ether_header *eh = (struct ether_header *)(rxbuf + sizeof(*vh));
 	uint64_t dmac = mactou64(eh->ether_dhost);
+	vxstate_t *state = dp_state->vsd_state;
 	mac_vni_map_t &vnimap = state->vs_vni_table.mac2vni;
+	uint16_t pktlen;
+	vnient_t ent;
 
 	auto it = vnimap.find(dmac);
 	/* we have no knowledge of this MAC address */
 	if (it == vnimap.end())
 		return (0);
+	ent.data = it->second;
 	/* this MAC address isn't on the VXLAN that we were addressed with */
-	if (it->second != rxvxlanid)
+	if (ent.fields.vxlanid != rxvxlanid)
 		return (0);
 	/* copy encapsulated packet */
-	nm_pkt_copy(rxbuf, txbuf + sizeof(*vh), ps->ps_rx_len);
-
+	pktlen = ps->ps_rx_len -  sizeof(struct vxlan_header);
+	nm_pkt_copy(rxbuf + sizeof(*vh), txbuf, pktlen);
+	*(ps->ps_tx_len) = pktlen;
 	return (1);
 }
