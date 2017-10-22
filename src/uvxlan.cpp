@@ -32,7 +32,6 @@
 #include <net/ethernet.h>
 #define NETMAP_WITH_LIBS
 #include <net/netmap_user.h>
-#include <ipfw_exports.h>
 
 #include "uvxbridge.h"
 #include "uvxlan.h"
@@ -52,9 +51,6 @@
 #define AE_VM_VLANID_REQUEST	0x0F00040600080100UL
 #define AE_VM_VLANID_REQUEST_ALL	0x1000040600080100UL
 #define AE_VM_VLANID_REPLY	0x1100040600080100UL
-
-typedef int ip_fw_ctl_t(struct sockopt *, struct ip_fw_chain *);
-extern ip_fw_ctl_t *ip_fw_ctl_ptr;
 
 #define A(val) printf("got %s\n", #val)
 extern int debug;
@@ -321,7 +317,7 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 			if (it != intftbl.end()) {
 
 				reply = AE_VM_VXLANID_REPLY;
-				targetpa = it->second.ii_ent.fields.vxlanid;
+				targetpa = it->second->ii_ent.fields.vxlanid;
 			}
 			break;
 		}
@@ -329,7 +325,6 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 			A(ARPOP_VM_VXLANID_REQUEST_ALL);
 			break;
 		case ARPOP_VM_VXLANID_REPLY: {
-			intf_info_t ii;
 
 			A(ARPOP_VM_VXLANID_REPLY);
 			targetha = mactou64(sah->ae_tha);
@@ -338,12 +333,13 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 				auto it = intftbl.find(targetha);
 
 				if (it != intftbl.end()) {
-					vxlanid = it->second.ii_ent.fields.vxlanid;
+					vxlanid = it->second->ii_ent.fields.vxlanid;
 					auto it_ftable = ftablemap.find(vxlanid);
 					if (it_ftable != ftablemap.end() &&
 						it_ftable->second.size() == 0)
 						ftablemap.erase(vxlanid);
 
+					delete it->second;
 					intftbl.erase(targetha);
 				}
 			} else {
@@ -351,14 +347,12 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 				auto it = intftbl.find(targetha);
 
 				if (it != intftbl.end()) {
-					ii = it->second;
+					it->second->ii_ent.fields.vxlanid = sah->ae_tpa;
 				} else {
-					ii.ii_ent.data = 0;
-					/* XXX allocate firewall chains */
-
+					intf_info_t *ii = new intf_info();
+					ii->ii_ent.fields.vxlanid = sah->ae_tpa;
+					intftbl.insert(pair<uint64_t, intf_info_t*>(targetha, ii));
 				}
-				ii.ii_ent.fields.vxlanid = sah->ae_tpa;
-				intftbl.insert(pair<uint64_t, intf_info_t>(targetha, ii));
 				auto it_ftable = ftablemap.find(sah->ae_tpa);
 				if (it_ftable == ftablemap.end())
 					ftablemap.insert(pair<uint32_t, ftable_t>(sah->ae_tpa, ftable));
@@ -371,32 +365,27 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 			auto it = intftbl.find(targetha);
 			if (it != intftbl.end()) {
 				reply = AE_VM_VLANID_REPLY;
-				targetpa = it->second.ii_ent.fields.vlanid;
+				targetpa = it->second->ii_ent.fields.vlanid;
 			}
 			break;
 		}
 		case ARPOP_VM_VLANID_REQUEST_ALL:
 			A(ARPOP_VM_VLANID_REQUEST_ALL);
 			break;
-		case ARPOP_VM_VLANID_REPLY:
+		case ARPOP_VM_VLANID_REPLY: {
 			A(ARPOP_VM_VLANID_REPLY);
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
-			if (sah->ae_tpa == 0)
-				intftbl.erase(targetha);
-			else {
-				intf_info_t ii;
-				auto it = intftbl.find(targetha);
+			auto it = intftbl.find(targetha);
 
-				if (it != intftbl.end())
-					ii = it->second;
-				else {
-					ii.ii_ent.data = 0;
-					/* XXX allocate firewall chain */
-				}
-				ii.ii_ent.fields.vlanid = sah->ae_tpa;
-				intftbl.insert(pair<uint64_t, intf_info_t>(targetha, ii));
+			if (it != intftbl.end())
+				it->second->ii_ent.fields.vlanid = sah->ae_tpa;
+			else if (sah->ae_tpa != 0) {
+				intf_info_t *ii = new intf_info();
+				ii->ii_ent.fields.vlanid = sah->ae_tpa;
+				intftbl.insert(pair<uint64_t, intf_info_t*>(targetha, ii));
 			}
 			break;
+		}
 		default:
 			printf("unrecognized value data: 0x%016lX op: 0x%02X\n", sah->ae_hdr.data, op);
 	}
@@ -721,7 +710,7 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unuse
 			data_send_arp(mac, 0, AE_VM_VXLANID_REQUEST, state);
 			return (0);
 		}
-		vxlanid = it_ii->second.ii_ent.fields.vxlanid;
+		vxlanid = it_ii->second->ii_ent.fields.vxlanid;
 		auto it_ftable = ftablemap->find(vxlanid);
 		if (it_ftable == ftablemap->end()) {
 			/* send request for VXLANID */
@@ -787,7 +776,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	targetha = srcmac;
 	auto it_ii = intftbl.find(targetha);
 	if (it_ii != intftbl.end()) {
-		vxlanid = it_ii->second.ii_ent.fields.vxlanid;
+		vxlanid = it_ii->second->ii_ent.fields.vxlanid;
 	} else {
 		data_send_arp(targetha, 0, AE_VM_VXLANID_REQUEST, state);
 		/* send request for VXLANID */
@@ -879,7 +868,7 @@ vxlan_decap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 	if (it == intftbl.end())
 		return (0);
 	/* this MAC address isn't on the VXLAN that we were addressed with */
-	if (it->second.ii_ent.fields.vxlanid != rxvxlanid)
+	if (it->second->ii_ent.fields.vxlanid != rxvxlanid)
 		return (0);
 	/* copy encapsulated packet */
 	pktlen = ps->ps_rx_len -  sizeof(struct vxlan_header);

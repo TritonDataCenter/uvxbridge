@@ -70,7 +70,7 @@ configure_beastie0(vxstate_t *state)
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
 	uint64_t ptnet_mac0, ptnet_mac1, physarp;
 	vfe_t vfe;
-	intf_info_t intfent;
+	intf_info_t *intfent;
 	uint32_t vxlanid = ntohl(150) >> 8;
 	uint32_t peerip;
 
@@ -83,11 +83,9 @@ configure_beastie0(vxstate_t *state)
 	ptnet_mac0 = mac_parse("00:a0:98:69:52:53");
 	ptnet_mac1 = mac_parse("00:a0:98:11:1c:d8");
 
-	intfent.ii_ent.data = 0;
-	intfent.ii_ent.fields.vxlanid = vxlanid;
-	/* XXX allocate firewall chain here */
-
-	intftbl->insert(pair<uint64_t, intf_info_t>(ptnet_mac1, intfent));
+	intfent = new intf_info();
+	intfent->ii_ent.fields.vxlanid = vxlanid;
+	intftbl->insert(pair<uint64_t, intf_info_t*>(ptnet_mac0, intfent));
 
 	bzero(&vfe, sizeof(vfe_t));
 	vfe.vfe_raddr.in4.s_addr = inet_network("192.168.2.2");
@@ -109,7 +107,7 @@ configure_beastie1(vxstate_t *state)
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
 	uint64_t ptnet_mac0, ptnet_mac1, physarp;
 	vfe_t vfe;
-	intf_info_t intfent;
+	intf_info_t *intfent;
 	uint32_t vxlanid = ntohl(150) >> 8;
 	uint32_t peerip;
 
@@ -122,11 +120,9 @@ configure_beastie1(vxstate_t *state)
 	ptnet_mac0 = mac_parse("00:a0:98:69:52:53");
 	ptnet_mac1 = mac_parse("00:a0:98:11:1c:d8");
 
-	intfent.ii_ent.data = 0;
-	intfent.ii_ent.fields.vxlanid = vxlanid;
-	/* XXX allocate firewall chain here */
-
-	intftbl->insert(pair<uint64_t, intf_info_t>(ptnet_mac1, intfent));
+	intfent = new intf_info();
+	intfent->ii_ent.fields.vxlanid = vxlanid;
+	intftbl->insert(pair<uint64_t, intf_info_t*>(ptnet_mac1, intfent));
 
 	bzero(&vfe, sizeof(vfe_t));
 	vfe.vfe_raddr.in4.s_addr = inet_network("192.168.2.1");

@@ -34,6 +34,9 @@
 #include <string>
 #include "proto.h"
 
+#include <ipfw_exports.h>
+
+
 using std::string;
 using std::pair;
 using std::map;
@@ -78,9 +81,17 @@ typedef union vni_entry {
 typedef struct intf_info {
 	vnient_t ii_ent;
 	struct ip_fw_chain *ii_chain;
+	intf_info() {
+		this->ii_ent.data = 0;
+		this->ii_chain = ip_fw_chain_new();
+	}
+	~intf_info() {
+		ip_fw_chain_delete(this->ii_chain);
+		this->ii_chain = NULL;
+	}
 } intf_info_t;
 
-typedef map<uint64_t, intf_info_t> intf_info_map_t;
+typedef map<uint64_t, intf_info_t*> intf_info_map_t;
 typedef pair<uint64_t, uint64_t> u64pair;
 
 typedef union vxlan_in_addr {

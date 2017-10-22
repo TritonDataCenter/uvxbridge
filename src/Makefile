@@ -1,11 +1,12 @@
 .include "../Makefile.inc"
 
+PROG_CXX=uvxbridge
 SRCS=main.cpp dispatch.cpp datapath.c uvxlan.cpp xxhash.c config.cpp
-LDFLAGS+=-pthread -L${.CURDIR}/../kipfw -lkipfw
+LDADD= -L../kipfw -lkipfw
+LDFLAGS+=-pthread 
 CFLAGS+= -include ${.CURDIR}/../kipfw/extra/glue.h
 CFLAGS+= -DUSERSPACE
 CFLAGS+= -I${.CURDIR}/../kipfw/extra
-PROG_CXX=uvxbridge
 MAN=
 
 .include <bsd.prog.mk>
