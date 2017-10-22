@@ -2,7 +2,7 @@
 .include <bsd.init.mk>
 
 .PATH: ${.CURDIR}/../kipfw/extra
-CFLAGS += -include ../kipfw/extra/glue.h
+CFLAGS += -include ${.CURDIR}/../kipfw/extra/glue.h
 CFLAGS += $(INCDIR)
 SRCS= ipfw2.c dummynet.c main.c ipv6.c altq.c tables.c glue.c opt_ipsec.h
 
@@ -14,5 +14,5 @@ LIB=ipfw
 
 .include <bsd.lib.mk>
 opt_ipsec.h:
-	(cd ../objs; $(MAKE) -f ../kipfw/Makefile include_e)
+	(cd ${.CURDIR}/../objs; $(MAKE) -f ${.CURDIR}/../kipfw/Makefile include_e)
 
