@@ -134,12 +134,13 @@ struct egress_cache {
 	} ec_hdr;
 };
 
-#define NM_PORT_MAX 8
+/*
+ * Need to have separate descriptors for each
+ * txring/rxring pair to support multiple threads
+ */
+#define NM_PORT_MAX 1
 
 typedef struct vxlan_state {
-	/* egress cache if next == prev */
-	struct egress_cache vs_ecache;
-
 	/* forwarding table */
 	ftablemap_t vs_ftables;
 
@@ -178,22 +179,48 @@ typedef struct vxlan_state {
 	 * structures below this line
 	 */
 
-	/* statistics */
-	struct uvxstat vs_stats;
-
 	/* the last time *_initiate was executed */
 	struct timeval vs_tlast;
 
 	/* configuration netmap descriptor */
 	struct nm_desc *vs_nm_config;
 
-	/* if data path - our identifier */
-	uint32_t vs_datapath_id;
 	volatile uint32_t vs_datapath_count;
 
 	/* each data path's state */
-	struct vxlan_state **vs_dp_states[NM_PORT_MAX];
+	struct vxlan_state_dp *vs_dp_states[NM_PORT_MAX];
+
+	vxlan_state(uint64_t pmac, uint64_t cmac, uint64_t icount) {
+		this->vs_prov_mac = pmac;
+		this->vs_ctrl_mac = cmac;
+		this->vs_tlast.tv_sec = this->vs_tlast.tv_usec = 0;
+		/* XXX GET THE ACTUAL INTERFACE VALUE */
+		this->vs_intf_mac = 0xCAFEBEEFBABE;
+		this->vs_seed = arc4random();
+		this->vs_min_port = IPPORT_HIFIRSTAUTO;	/* 49152 */
+		this->vs_max_port = IPPORT_HILASTAUTO;	/* 65535 */
+		this->vs_datapath_count = icount;
+	}
 } vxstate_t;
+
+typedef struct vxlan_state_dp {
+	vxstate_t *vsd_state;
+
+	/* egress cache if next == prev */
+	struct egress_cache vsd_ecache;
+
+	/* statistics */
+	struct uvxstat vsd_stats;
+
+	/* if data path - our identifier */
+	uint32_t vsd_datapath_id;
+
+	vxlan_state_dp(uint32_t id, vxstate_t *state) {
+		bzero(this, sizeof(*this));
+		this->vsd_datapath_id = id;
+		this->vsd_state = state;
+	}
+} vxstate_dp_t;
 
 #define DBG(_fmt, ...)						\
 do {									\

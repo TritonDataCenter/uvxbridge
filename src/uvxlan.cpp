@@ -464,7 +464,9 @@ cmd_send_dhcp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *st
 static void
 uvxstat_fill(struct uvxstat *stat, vxstate_t *state)
 {
-	memcpy(stat, &state->vs_stats, sizeof(*stat));
+	/* XXX -- only supports one datapath */
+	if (state->vs_datapath_count)
+		memcpy(stat, &state->vs_dp_states[0]->vsd_stats, sizeof(*stat));
 }
 
 int
@@ -537,8 +539,9 @@ cmd_dispatch_ip(char *rxbuf, char *txbuf_ __unused, path_state_t *ps, vxstate_t 
  */
 int
 data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps,
-				  vxstate_t *state)
+				  vxstate_dp_t *dp_state)
 {
+	vxstate_t *state = dp_state->vsd_state;
 	struct arphdr_ether *sah;
 	struct ether_vlan_header *evh;
 	int etype, hdrlen;
@@ -570,10 +573,11 @@ data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps,
  */
 int
 data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unused,
-				  vxstate_t *state)
+				  vxstate_dp_t *dp_state)
 {
 	struct ether_vlan_header *evh;
 	struct arphdr_ether *sae;
+	vxstate_t *state = dp_state->vsd_state;
 	mac_vni_map_t *vnitbl = &state->vs_vni_table.mac2vni;
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	int etype, hdrlen;
@@ -632,10 +636,11 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unuse
  */
 int
 vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
-			   vxstate_t *state)
+			   vxstate_dp_t *dp_state)
 {
 	struct ether_vlan_header *evh;
 	int hdrlen, etype;
+	vxstate_t *state = dp_state->vsd_state;
 	mac_vni_map_t *vnitbl = &state->vs_vni_table.mac2vni;
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	rte_t *rte = &state->vs_dflt_rte;
@@ -649,10 +654,10 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 	evh = (struct ether_vlan_header *)(rxbuf);
 	srcmac = mactou64(evh->evl_shost);
 	dstmac = mactou64(evh->evl_dhost);
-	if (state->vs_ecache.ec_smac == srcmac &&
-		state->vs_ecache.ec_dmac == dstmac) {
+	if (dp_state->vsd_ecache.ec_smac == srcmac &&
+		dp_state->vsd_ecache.ec_dmac == dstmac) {
 		/* XXX VLAN only */
-		memcpy(txbuf, &state->vs_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
+		memcpy(txbuf, &dp_state->vsd_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
 		nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
 		*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
 		return (1);
@@ -744,7 +749,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 		dstmac = it->second;
 	}
 	eh_fill(&ec.ec_hdr.vh.vh_ehdr, state->vs_intf_mac, dstmac, ETHERTYPE_IP);
-	memcpy(&state->vs_ecache, &ec, sizeof(struct egress_cache));
+	memcpy(&dp_state->vsd_ecache, &ec, sizeof(struct egress_cache));
 	memcpy(txbuf, &ec.ec_hdr, sizeof(struct vxlan_header));
 	nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
     return (1);
@@ -752,12 +757,13 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps __unused,
 
 int
 vxlan_decap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
-			   vxstate_t *state)
+			   vxstate_dp_t *dp_state)
 {
 	struct vxlan_header *vh = (struct vxlan_header *)rxbuf;
 	uint32_t rxvxlanid = vh->vh_vxlanhdr.v_vxlanid;
 	struct ether_header *eh = (struct ether_header *)(rxbuf + sizeof(*vh));
 	uint64_t dmac = mactou64(eh->ether_dhost);
+	vxstate_t *state = dp_state->vsd_state;
 	mac_vni_map_t &vnimap = state->vs_vni_table.mac2vni;
 
 	auto it = vnimap.find(dmac);

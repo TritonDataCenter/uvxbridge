@@ -76,7 +76,8 @@ typedef struct {
 	pkt_dispatch_t da_rx_dispatch; /* dispatch handler for rx */
 	pkt_dispatch_t da_tx_dispatch; /* dispatch handler for tx -- client operation */
     int da_poll_timeout; /* poll timeout interval in ms */
-	int da_flags;
+	uint16_t da_flags;
+	uint16_t da_idx;
 } dp_args_t;
 
 /*

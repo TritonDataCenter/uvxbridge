@@ -211,10 +211,9 @@ cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
 int
 cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 {
-	vxstate_t *state = (vxstate_t *)arg;
+	vxstate_t *oldstate, *newstate, *state = (vxstate_t *)arg;
 	rte_t *rte = &state->vs_dflt_rte;
 	struct timeval tnow, delta;
-	struct vxlan_state *dp_states[NM_PORT_MAX];
 	int dp_count;
 
 	gettimeofday(&tnow, NULL);
@@ -231,21 +230,20 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 
 	/* update all datapath threads with a copy of the latest state */
 	dp_count = state->vs_datapath_count;
-	for (int i = 0; i < dp_count; i++) {
-		dp_states[i] = *state->vs_dp_states[i];
-		*state->vs_dp_states[i] = new vxstate_t(*state);
+	if (dp_count) {
+		newstate = new vxstate_t(*state);
+		oldstate = state->vs_dp_states[0]->vsd_state;
+		for (int i = 0; i < dp_count; i++)
+			state->vs_dp_states[i]->vsd_state = newstate;
+		/* XXX --- clunky LOLEBR --- sleep for 50ms before freeing */
+		usleep(50000);
 	}
-	/* XXX --- clunky --- sleep for 50ms before freeing */
-	usleep(50000);
-	for (int i = 0; i < dp_count; i++)
-		delete dp_states[i];
-
 	return (1);
 }
 
 
 static int
-ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
+ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
 {
 	struct ether_vlan_header *evh;
 	int etype;
@@ -274,7 +272,7 @@ ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 }
 
 static int
-egress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
+egress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
 {
 	struct ether_vlan_header *evh;
 	int etype;
@@ -305,7 +303,7 @@ egress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 int
 data_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 {
-	vxstate_t *state = (vxstate_t *)arg;
+	vxstate_dp_t *state = (vxstate_dp_t *)arg;
 
 	if (ps->ps_dir == AtoB)
 		return egress_dispatch(rxbuf, txbuf, ps, state);
