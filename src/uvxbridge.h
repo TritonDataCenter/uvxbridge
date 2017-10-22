@@ -132,6 +132,7 @@ struct egress_cache {
 		struct vxlan_header vh;
 		struct vxlan_vlan_header vvh;
 	} ec_hdr;
+
 };
 
 /*
@@ -141,17 +142,17 @@ struct egress_cache {
 #define NM_PORT_MAX 1
 
 typedef struct vxlan_state {
-	/* forwarding table */
-	ftablemap_t vs_ftables;
-
-	/* phys nd table */
-	l2tbl_t vs_l2_phys;
-
 	/* vm vni table */
 	vnitbl_t vs_vni_table;
 
 	/* default route */
 	rte_t vs_dflt_rte;
+
+	/* forwarding table */
+	ftablemap_t vs_ftables;
+
+	/* phys nd table */
+	l2tbl_t vs_l2_phys;
 
 	/* encap port allocation */
 	uint16_t vs_min_port;
@@ -221,6 +222,9 @@ typedef struct vxlan_state_dp {
 		this->vsd_state = state;
 	}
 } vxstate_dp_t;
+
+void configure_beastie0(vxstate_t *state);
+void configure_beastie1(vxstate_t *state);
 
 #define DBG(_fmt, ...)						\
 do {									\

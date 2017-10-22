@@ -126,14 +126,14 @@ main(int argc, char *const argv[])
 {
 	int ch;
 	char *ingress, *egress, *config, *log;
-	uint32_t icount, ecount;
+	uint32_t icount, ecount, testcase;
 	uint64_t pmac, cmac;
 	vxstate_t *state;
 	dp_args_t cmd_port_args;
 
 	ingress = egress = config = NULL;
-	ecount = icount = pmac = cmac = 0;
-	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:d:")) != -1) {
+	testcase = ecount = icount = pmac = cmac = 0;
+	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:d:t:")) != -1) {
 		switch (ch) {
 			case 'i':
 				ingress = optarg;
@@ -157,6 +157,9 @@ main(int argc, char *const argv[])
 				break;
 			case 'd':
 				debug = strtol(optarg, NULL, 10);
+				break;
+			case 't':
+				testcase = strtol(optarg, NULL, 10);
 				break;
 			case '?':
 			default:
@@ -189,6 +192,11 @@ main(int argc, char *const argv[])
 	}
 
 	state = new vxstate_t(pmac, cmac, icount);
+	if (testcase == 1) {
+		configure_beastie0(state);
+	} else if (testcase == 2) {
+		configure_beastie1(state);
+	}
 	for (uint32_t i = 0; i < icount; i++)
 		start_datapath(ingress, egress, state, i);
 	/* yield for 50ms intervals until all threads have started */
