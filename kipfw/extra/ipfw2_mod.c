@@ -64,7 +64,7 @@ ip_fw_chain_new(void)
 }
 
 void
-ip_fw_chain_destroy(struct ip_fw_chain *chain)
+ip_fw_chain_delete(struct ip_fw_chain *chain)
 {
 	if (chain == NULL)
 		return;
