@@ -37,7 +37,9 @@
  
 #ifndef _GLUE_H
 #define	_GLUE_H
-
+#ifdef __cplusplus
+extern "C" {
+#endif
 /*
  * common definitions to allow portability
  */
@@ -473,24 +475,28 @@ struct in_addr;
 static inline void
 _pkt_copy(const void *_src, void *_dst, int l)
 {
-        const uint64_t *src = _src;
-        uint64_t *dst = _dst;
+	const uint64_t *src = (uint64_t *)(uintptr_t)_src;
+	uint64_t *dst = (uint64_t *)(uintptr_t)_dst;
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)       __builtin_expect(!!(x), 0)
-        if (unlikely(l >= 1024)) {
-                bcopy(src, dst, l);
-                return;
-        }
-        for (; l > 0; l-=64) {
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-                *dst++ = *src++;
-        }
+	if (unlikely(l >= 1024)) {
+		bcopy(src, dst, l);
+		return;
+	}
+	for (; l > 0; l-=64) {
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+	}
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_GLUE_H */
