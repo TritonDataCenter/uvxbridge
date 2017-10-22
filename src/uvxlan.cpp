@@ -27,12 +27,13 @@
  */
 
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <stdio.h>
 
 #include <net/ethernet.h>
 #define NETMAP_WITH_LIBS
 #include <net/netmap_user.h>
-#include <sys/poll.h>
+#include <ipfw_exports.h>
 
 #include "uvxbridge.h"
 #include "uvxlan.h"
@@ -53,6 +54,8 @@
 #define AE_VM_VLANID_REQUEST_ALL	0x1000040600080100UL
 #define AE_VM_VLANID_REPLY	0x1100040600080100UL
 
+typedef int ip_fw_ctl_t(struct sockopt *, struct ip_fw_chain *);
+extern ip_fw_ctl_t *ip_fw_ctl_ptr;
 
 #define A(val) printf("got %s\n", #val)
 extern int debug;
@@ -508,36 +511,125 @@ cmd_dispatch_bp(struct dhcp *bp, vxstate_t *state)
 	return (1);
 }
 
+/*
+ * generic handler for sockopt functions
+ */
+static int
+ctl_handler(struct sockopt *sopt, struct ip_fw_chain *chain)
+{
+	int error = EINVAL;
+
+	ND("called, level %d", sopt->sopt_level);
+	if (sopt->sopt_level != IPPROTO_IP)
+		return (EINVAL);
+	switch (sopt->sopt_name) {
+	default:
+		D("command not recognised %d", sopt->sopt_name);
+		break;
+	case IP_FW3: // XXX untested
+	case IP_FW_ADD: /* ADD actually returns the body... */
+	case IP_FW_GET:
+	case IP_FW_DEL:
+	case IP_FW_TABLE_GETSIZE:
+	case IP_FW_TABLE_LIST:
+	case IP_FW_NAT_GET_CONFIG:
+	case IP_FW_NAT_GET_LOG:
+	case IP_FW_FLUSH:
+	case IP_FW_ZERO:
+	case IP_FW_RESETLOG:
+	case IP_FW_TABLE_ADD:
+	case IP_FW_TABLE_DEL:
+	case IP_FW_TABLE_FLUSH:
+	case IP_FW_NAT_CFG:
+	case IP_FW_NAT_DEL:
+		if (ip_fw_ctl_ptr != NULL)
+			error = ip_fw_ctl_ptr(sopt, chain);
+		else {
+			D("ipfw not enabled");
+			error = ENOPROTOOPT;
+		}
+		break;
+#ifdef __unused__
+	case IP_DUMMYNET_GET:
+	case IP_DUMMYNET_CONFIGURE:
+	case IP_DUMMYNET_DEL:
+	case IP_DUMMYNET_FLUSH:
+	case IP_DUMMYNET3:
+		if (ip_dn_ctl_ptr != NULL)
+			error = ip_dn_ctl_ptr(sopt);
+		else
+			error = ENOPROTOOPT;
+		break ;
+#endif
+	}
+	ND("returning error %d", error);
+	return error;
+}
+
 int
-cmd_dispatch_ip(char *rxbuf, char *txbuf_ __unused, path_state_t *ps, vxstate_t *state)
+cmd_dispatch_ipfw(struct ipfw_wire_hdr *ipfw, char *txbuf, vxstate_t *state)
+{
+	struct thread dummy;
+	socklen_t optlen;
+	uint64_t mac;
+	int optname, level, rc;
+	struct sockopt sopt;
+	enum sopt_dir dir;
+	void *optval  = (void *)(uintptr_t)(ipfw + 1);
+	struct ip_fw_chain *chain = NULL;
+
+	sopt.sopt_dir = (enum sopt_dir)ipfw->dir;
+	sopt.sopt_level = ipfw->level;
+	sopt.sopt_val = optval;
+	sopt.sopt_name = ipfw->optname;
+	sopt.sopt_valsize = ipfw->optlen;
+	sopt.sopt_td = &dummy;
+	mac = ((uint64_t)ipfw->mac) & 0xFFFFFFFFFFFF;
+	/* lookup mac in state to get chain */
+	if (0 /* if found call ctl_handler with chain */ ) {
+		ctl_handler(&sopt, chain);
+		/* now respond with any changes to sopt depending on direction */
+
+		/* populate header */
+		return (1);
+	}
+	return (0);
+}
+
+int
+cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
 	struct ip *ip = (struct ip *)(uintptr_t)(rxbuf + ETHER_HDR_LEN);
 	struct udphdr *uh = (struct udphdr *)(uintptr_t)((caddr_t)ip + (ip->ip_hl << 2));
 	struct dhcp *bp = (struct dhcp *)(uintptr_t)(uh + 1);
+	struct ipfw_wire_hdr *ipfw = (struct ipfw_wire_hdr *)(uintptr_t)(uh + 1);
+	uint16_t dport;
 	/* validate ip header */
 
 	/* validate the UDP header */
-
+	dport = ntohs(uh->uh_dport);
 
 	/* we're only supporting a BOOTP response for the moment */
 	if (ps->ps_rx_len < sizeof(*bp) + BP_MSG_OVERHEAD)
 		return 0;
 
-	if (cmd_dispatch_bp(bp, state)) {
-		char *txbuf;
+	if (dport == IPPORT_BOOTPS && cmd_dispatch_bp(bp, state)) {
+		char *txbuf_;
 		path_state_t psgrat;
 
 		bzero(&psgrat, sizeof(path_state_t));
-		if ((txbuf = get_egress_txbuf(&psgrat, state)) == NULL)
+		if ((txbuf_ = get_egress_txbuf(&psgrat, state)) == NULL)
 			return (0);
 		/*
 		 * we have our address -- now we want to send out a
 		 * gratuitous ARP for the switch
 		 */
-		data_send_arp_phys(rxbuf, txbuf, &psgrat, state, 1);
+		data_send_arp_phys(rxbuf, txbuf_, &psgrat, state, 1);
 		txring_next(&psgrat, 60);
 		/* XXX proactively resolve the MAC address for the gateway */
 		/* ... */
+	} else if (dport == IPPORT_IPFWPS) {
+		return cmd_dispatch_ipfw(ipfw, txbuf, state);
 	}
 	return (0);
 }
