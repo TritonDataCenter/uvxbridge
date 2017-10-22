@@ -1,8 +1,7 @@
 /*
  * Copyright (C) 2017 Joyent Inc.
+ * Copyright (C) 2017 Matthew Macy <matt.macy@joyent.com>
  * All rights reserved.
- *
- * Written by: Matthew Macy <matt.macy@joyent.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -76,11 +75,13 @@ typedef union vni_entry {
 	} fields;
 } vnient_t;
 
-typedef map<uint64_t, uint64_t> mac_vni_map_t;
+typedef struct intf_info {
+	vnient_t ii_ent;
+	struct ip_fw_chain *ii_chain;
+} intf_info_t;
+
+typedef map<uint64_t, intf_info_t> intf_info_map_t;
 typedef pair<uint64_t, uint64_t> u64pair;
-typedef struct vm_vni_table {
-	mac_vni_map_t mac2vni;
-} vnitbl_t;
 
 typedef union vxlan_in_addr {
 	struct in_addr	in4;
@@ -142,8 +143,8 @@ struct egress_cache {
 #define NM_PORT_MAX 1
 
 typedef struct vxlan_state {
-	/* vm vni table */
-	vnitbl_t vs_vni_table;
+	/* vm vni/fw table */
+	intf_info_map_t vs_intf_table;
 
 	/* default route */
 	rte_t vs_dflt_rte;

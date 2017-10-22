@@ -1,8 +1,7 @@
 /*
  * Copyright (C) 2017 Joyent Inc.
+ * Copyright (C) 2017 Matthew Macy <matt.macy@joyent.com>
  * All rights reserved.
- *
- * Written by: Matthew Macy <matt.macy@joyent.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -235,7 +234,7 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 	uint64_t len, targetha = 0, reply = 0;
 	l2tbl_t &l2tbl = state->vs_l2_phys;
 	ftablemap_t &ftablemap = state->vs_ftables;
-	mac_vni_map_t &vnitbl = state->vs_vni_table.mac2vni;
+	intf_info_map_t &intftbl = state->vs_intf_table;
 
 	len = ps->ps_rx_len;
 	if (len < ETHER_HDR_LEN + sizeof(struct arphdr_ether) && debug < 2)
@@ -318,13 +317,11 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 		case ARPOP_VM_VXLANID_REQUEST: {
 			A(ARPOP_VM_VXLANID_REQUEST);
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
-			auto it = vnitbl.find(targetha);
-			if (it != vnitbl.end()) {
-				vnient_t ent;
+			auto it = intftbl.find(targetha);
+			if (it != intftbl.end()) {
 
 				reply = AE_VM_VXLANID_REPLY;
-				ent.data = it->second;
-				targetpa = ent.fields.vxlanid;
+				targetpa = it->second.ii_ent.fields.vxlanid;
 			}
 			break;
 		}
@@ -332,30 +329,36 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 			A(ARPOP_VM_VXLANID_REQUEST_ALL);
 			break;
 		case ARPOP_VM_VXLANID_REPLY: {
-			vnient_t ent;
+			intf_info_t ii;
 
 			A(ARPOP_VM_VXLANID_REPLY);
-			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
+			targetha = mactou64(sah->ae_tha);
 			if (sah->ae_tpa == 0) {
-				auto it = vnitbl.find(targetha);
-				if (it != vnitbl.end()) {
-					auto it_ftable = ftablemap.find(it->second);
+				uint32_t vxlanid;
+				auto it = intftbl.find(targetha);
+
+				if (it != intftbl.end()) {
+					vxlanid = it->second.ii_ent.fields.vxlanid;
+					auto it_ftable = ftablemap.find(vxlanid);
 					if (it_ftable != ftablemap.end() &&
 						it_ftable->second.size() == 0)
-						ftablemap.erase(it->second);
+						ftablemap.erase(vxlanid);
 
-					vnitbl.erase(targetha);
+					intftbl.erase(targetha);
 				}
 			} else {
 				ftable_t ftable;
-				auto it = vnitbl.find(targetha);
+				auto it = intftbl.find(targetha);
 
-				if (it != vnitbl.end())
-					ent.data = it->second;
-				else
-					ent.data = 0;
-				ent.fields.vxlanid = sah->ae_tpa;
-				vnitbl.insert(u64pair(targetha, ent.data));
+				if (it != intftbl.end()) {
+					ii = it->second;
+				} else {
+					ii.ii_ent.data = 0;
+					/* XXX allocate firewall chains */
+
+				}
+				ii.ii_ent.fields.vxlanid = sah->ae_tpa;
+				intftbl.insert(pair<uint64_t, intf_info_t>(targetha, ii));
 				auto it_ftable = ftablemap.find(sah->ae_tpa);
 				if (it_ftable == ftablemap.end())
 					ftablemap.insert(pair<uint32_t, ftable_t>(sah->ae_tpa, ftable));
@@ -365,13 +368,10 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 		case ARPOP_VM_VLANID_REQUEST: {
 			A(ARPOP_VM_VLANID_REQUEST);
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
-			auto it = vnitbl.find(targetha);
-			if (it != vnitbl.end()) {
-				vnient_t ent;
-
+			auto it = intftbl.find(targetha);
+			if (it != intftbl.end()) {
 				reply = AE_VM_VLANID_REPLY;
-				ent.data = it->second;
-				targetpa = ent.fields.vlanid;
+				targetpa = it->second.ii_ent.fields.vlanid;
 			}
 			break;
 		}
@@ -382,17 +382,19 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 			A(ARPOP_VM_VLANID_REPLY);
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
 			if (sah->ae_tpa == 0)
-				vnitbl.erase(targetha);
+				intftbl.erase(targetha);
 			else {
-				vnient_t ent;
-				auto it = vnitbl.find(targetha);
+				intf_info_t ii;
+				auto it = intftbl.find(targetha);
 
-				if (it != vnitbl.end())
-					ent.data = it->second;
-				else
-					ent.data = 0;
-				ent.fields.vlanid = sah->ae_tpa;
-				vnitbl.insert(u64pair(targetha, ent.data));
+				if (it != intftbl.end())
+					ii = it->second;
+				else {
+					ii.ii_ent.data = 0;
+					/* XXX allocate firewall chain */
+				}
+				ii.ii_ent.fields.vlanid = sah->ae_tpa;
+				intftbl.insert(pair<uint64_t, intf_info_t>(targetha, ii));
 			}
 			break;
 		default:
@@ -680,7 +682,7 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unuse
 	struct ether_vlan_header *evh;
 	struct arphdr_ether *sae;
 	vxstate_t *state = dp_state->vsd_state;
-	mac_vni_map_t *vnitbl = &state->vs_vni_table.mac2vni;
+	intf_info_map_t &intftbl = state->vs_intf_table;
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	int etype, hdrlen;
 	uint64_t mac;
@@ -699,8 +701,8 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unuse
 	/* a host local VM MAC address -- need to have vxlanid */
 	mac = mactou64(evh->evl_shost);
 	if (mac != state->vs_prov_mac) {
-		auto it_vni = vnitbl->find(mac);
-		if (it_vni == vnitbl->end()) {
+		auto it_ii = intftbl.find(mac);
+		if (it_ii == intftbl.end()) {
 			/* request vxlanid */
 			data_send_arp(mac, 0, AE_VM_VXLANID_REQUEST, state);
 			return (0);
@@ -713,13 +715,13 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unuse
 		sae->ae_hdr.fields.ar_op == ntohs(ARPOP_REPLY)) {
 		/* check if we have an IP -> MAC mapping */
 		mac = mactou64(evh->evl_dhost);
-		auto it_vni = vnitbl->find(mac);
-		if (it_vni == vnitbl->end()) {
+		auto it_ii = intftbl.find(mac);
+		if (it_ii == intftbl.end()) {
 			/* request vxlanid */
 			data_send_arp(mac, 0, AE_VM_VXLANID_REQUEST, state);
 			return (0);
 		}
-		vxlanid = it_vni->second;
+		vxlanid = it_ii->second.ii_ent.fields.vxlanid;
 		auto it_ftable = ftablemap->find(vxlanid);
 		if (it_ftable == ftablemap->end()) {
 			/* send request for VXLANID */
@@ -744,12 +746,11 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	struct ether_vlan_header *evh;
 	int hdrlen, etype;
 	vxstate_t *state = dp_state->vsd_state;
-	mac_vni_map_t *vnitbl = &state->vs_vni_table.mac2vni;
+	intf_info_map_t &intftbl = state->vs_intf_table;
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	rte_t *rte = &state->vs_dflt_rte;
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
 	struct egress_cache ec;
-	vnient_t vnient;
 	uint64_t srcmac, dstmac, targetha;
 	uint16_t sport, pktsize;
 	uint32_t vxlanid, laddr, raddr, maskraddr, maskladdr, range;
@@ -784,10 +785,9 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 
 	/* first map evh->evl_shost -> vxlanid / vlanid  --- vs_vni_table */
 	targetha = srcmac;
-	auto it_vni = vnitbl->find(targetha);
-	if (it_vni != vnitbl->end()) {
-		vnient.data = it_vni->second;
-		vxlanid = vnient.fields.vxlanid;
+	auto it_ii = intftbl.find(targetha);
+	if (it_ii != intftbl.end()) {
+		vxlanid = it_ii->second.ii_ent.fields.vxlanid;
 	} else {
 		data_send_arp(targetha, 0, AE_VM_VXLANID_REQUEST, state);
 		/* send request for VXLANID */
@@ -871,17 +871,15 @@ vxlan_decap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 	struct ether_header *eh = (struct ether_header *)(rxbuf + sizeof(*vh));
 	uint64_t dmac = mactou64(eh->ether_dhost);
 	vxstate_t *state = dp_state->vsd_state;
-	mac_vni_map_t &vnimap = state->vs_vni_table.mac2vni;
+	intf_info_map_t &intftbl = state->vs_intf_table;
 	uint16_t pktlen;
-	vnient_t ent;
 
-	auto it = vnimap.find(dmac);
+	auto it = intftbl.find(dmac);
 	/* we have no knowledge of this MAC address */
-	if (it == vnimap.end())
+	if (it == intftbl.end())
 		return (0);
-	ent.data = it->second;
 	/* this MAC address isn't on the VXLAN that we were addressed with */
-	if (ent.fields.vxlanid != rxvxlanid)
+	if (it->second.ii_ent.fields.vxlanid != rxvxlanid)
 		return (0);
 	/* copy encapsulated packet */
 	pktlen = ps->ps_rx_len -  sizeof(struct vxlan_header);
