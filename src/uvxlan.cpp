@@ -592,6 +592,8 @@ cmd_dispatch_ipfw(struct ipfw_wire_hdr *ipfw, char *txbuf, vxstate_t *state)
 
 		/* populate header */
 		return (1);
+	} else {
+		D("ipfw command dispatch not yet complete");
 	}
 	return (0);
 }
