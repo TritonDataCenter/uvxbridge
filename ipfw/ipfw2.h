@@ -274,6 +274,16 @@ int do_cmd(int optname, void *optval, uintptr_t optlen);
 int do_set3(int optname, struct _ip_fw3_opheader *op3, uintptr_t optlen);
 int do_get3(int optname, struct _ip_fw3_opheader *op3, size_t *optlen);
 
+
+/*
+ * Initialize library state with netmap descriptor
+ */
+int cmd_state_init(struct nm_desc *desc);
+/*
+ * set current guest mac 
+ */
+void cmd_state_mac_set(uint64_t mac);
+
 struct in6_addr;
 void n2mask(struct in6_addr *mask, int n);
 int contigmask(uint8_t *p, int len);
@@ -350,3 +360,4 @@ int table_check_name(char *tablename);
 void ipfw_list_ta(int ac, char *av[]);
 void ipfw_list_values(int ac, char *av[]);
 
+int ipfw_main(int oldac, char **oldav);

@@ -91,7 +91,7 @@ help(void)
  * av[0] points to the original program name, all other entries
  * point into the allocated chunk.
  */
-static int
+int
 ipfw_main(int oldac, char **oldav)
 {
 	int ch, ac;
@@ -449,7 +449,7 @@ ipfw_main(int oldac, char **oldav)
 	return 0;
 }
 
-
+#ifdef __unused__
 static void
 ipfw_readfile(int ac, char *av[])
 {
@@ -590,7 +590,6 @@ ipfw_readfile(int ac, char *av[])
 	}
 }
 
-#ifdef __unused__
 int
 main(int ac, char *av[])
 {

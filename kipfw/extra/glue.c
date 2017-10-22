@@ -403,12 +403,15 @@ sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp,
 enum sock_type {GET_SOCKOPT, SET_SOCKOPT};
 
 struct wire_hdr {
+	uint64_t mac:48;
+	uint64_t pad:16;
 	uint32_t optlen;	/* actual data len */
 	uint32_t level;		/* or error */
 	uint32_t optname;	/* or act len */
 	uint32_t dir;		/* in or out */
 };
 
+#ifdef __unused__
 /* do a complete write of the buffer */
 static int
 writen(int fd, const char *buf, int len)
@@ -445,9 +448,10 @@ readn(int fd, char *buf, int len)
 	ND("full read got %d", pos);
 	return 0;
 }
+#endif
 
 int
-__sockopt2(int s, int level, int optname, void *optval, socklen_t *optlen,
+__sockopt2(struct cmd_state *s, int level, int optname, void *optval, socklen_t *optlen,
    enum sopt_dir dir)
 {
 	struct wire_hdr r;
@@ -455,12 +459,13 @@ __sockopt2(int s, int level, int optname, void *optval, socklen_t *optlen,
 	int new_errno;
 
 	ND("dir %d optlen %d level %d optname %d", dir, len, level, optname);
+	r.mac = s->mac;
 	/* send request to the server */
 	r.optlen = htonl(len);
 	r.level = htonl(level);
 	r.optname = htonl(optname);
 	r.dir = htonl(dir);
-
+#ifdef __unused__
 	if (writen(s, (const char *) &r, sizeof(r)))
 		return -1;	/* error writing */
 
@@ -483,6 +488,7 @@ __sockopt2(int s, int level, int optname, void *optval, socklen_t *optlen,
 			return -1;	/* error reading */
 		}
 	}
+#endif	
 	if (optlen)
 		*optlen = ntohl(r.optlen); /* actual len */
 	new_errno = ntohl(r.level);
@@ -495,7 +501,7 @@ __sockopt2(int s, int level, int optname, void *optval, socklen_t *optlen,
  * getsockopt() replacement.
  */
 int
-getsockopt2(int s, int level, int optname, void *optval,
+getsockopt2(struct cmd_state *s, int level, int optname, void *optval,
 			socklen_t *optlen)
 {
 	return __sockopt2(s, level, optname, optval, optlen, SOPT_GET);
@@ -505,7 +511,7 @@ getsockopt2(int s, int level, int optname, void *optval,
  * setsockopt() replacement
  */
 int
-setsockopt2(int s, int level, int optname, void *optval,
+setsockopt2(struct cmd_state *s, int level, int optname, void *optval,
 			socklen_t optlen)
 {
 	/* optlen not changed, use the local address */

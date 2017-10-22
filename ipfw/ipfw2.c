@@ -71,7 +71,22 @@ struct format_opts {
 
 int resvd_set_number = RESVD_SET;
 
-int ipfw_socket = -1;
+static struct cmd_state *ipfw_state = NULL;
+
+int
+cmd_state_init(struct nm_desc *desc)
+{
+	if ((ipfw_state = malloc(sizeof(struct cmd_state))) == NULL)
+		return (ENOMEM);
+	ipfw_state->desc = desc;
+	ipfw_state->mac = 0;
+}
+
+void
+cmd_state_mac_set(uint64_t mac)
+{
+	ipfw_state->mac = mac;
+}
 
 #define	CHECK_LENGTH(v, len) do {				\
 	if ((v) < (len))					\
@@ -542,10 +557,8 @@ do_cmd(int optname, void *optval, uintptr_t optlen)
 	if (co.test_only)
 		return 0;
 
-	if (ipfw_socket == -1)
-		ipfw_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-	if (ipfw_socket < 0)
-		err(EX_UNAVAILABLE, "socket");
+	if (ipfw_state == NULL)
+		err(EX_SOFTWARE, "ipfw_state not initialized");
 
 	if (optname == IP_FW_GET || optname == IP_DUMMYNET_GET ||
 	    optname == IP_FW_ADD || optname == IP_FW3 ||
@@ -554,10 +567,10 @@ do_cmd(int optname, void *optval, uintptr_t optlen)
 	    optname == IP_FW_NAT_GET_LOG) {
 		if (optname < 0)
 			optname = -optname;
-		i = getsockopt(ipfw_socket, IPPROTO_IP, optname, optval,
+		i = getsockopt2(ipfw_state, IPPROTO_IP, optname, optval,
 			(socklen_t *)optlen);
 	} else {
-		i = setsockopt(ipfw_socket, IPPROTO_IP, optname, optval, optlen);
+		i = setsockopt2(ipfw_state, IPPROTO_IP, optname, optval, optlen);
 	}
 	return i;
 }
@@ -579,14 +592,12 @@ do_set3(int optname, ip_fw3_opheader *op3, uintptr_t optlen)
 	if (co.test_only)
 		return (0);
 
-	if (ipfw_socket == -1)
-		ipfw_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-	if (ipfw_socket < 0)
-		err(EX_UNAVAILABLE, "socket");
+	if (ipfw_state == NULL)
+		err(EX_SOFTWARE, "ipfw_state not initialized");
 
 	op3->opcode = optname;
 
-	return (setsockopt(ipfw_socket, IPPROTO_IP, IP_FW3, op3, optlen));
+	return (setsockopt2(ipfw_state, IPPROTO_IP, IP_FW3, op3, optlen));
 }
 
 /*
@@ -607,14 +618,12 @@ do_get3(int optname, ip_fw3_opheader *op3, size_t *optlen)
 	if (co.test_only)
 		return (0);
 
-	if (ipfw_socket == -1)
-		ipfw_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-	if (ipfw_socket < 0)
-		err(EX_UNAVAILABLE, "socket");
+	if (ipfw_state == NULL)
+		err(EX_SOFTWARE, "ipfw_state not initialized");
 
 	op3->opcode = optname;
 
-	error = getsockopt(ipfw_socket, IPPROTO_IP, IP_FW3, op3,
+	error = getsockopt2(ipfw_state, IPPROTO_IP, IP_FW3, op3,
 	    (socklen_t *)optlen);
 
 	return (error);

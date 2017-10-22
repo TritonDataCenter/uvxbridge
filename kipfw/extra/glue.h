@@ -299,8 +299,15 @@ int do_connect(const char *addr, int port);
 #define socket(a, b, c) do_connect(LOCALADDR, IPFW_PORT)
 #define setsockopt      setsockopt2
 #define getsockopt      getsockopt2
-int getsockopt2(int s, int lev, int optname, void *optval, socklen_t *optlen);
-int setsockopt2(int s, int lev, int optname, void *optval, socklen_t optlen);
+
+struct cmd_state {
+	/* netmap state */
+	struct nm_desc *desc;
+	/* mac address we're current operating on */
+	uint64_t mac;
+};
+int getsockopt2(struct cmd_state *s, int lev, int optname, void *optval, socklen_t *optlen);
+int setsockopt2(struct cmd_state *s, int lev, int optname, void *optval, socklen_t optlen);
 #endif /* KERNEL_SIDE */
 
 #endif	/* USERSPACE */
