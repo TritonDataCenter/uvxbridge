@@ -557,36 +557,61 @@ ctl_handler(struct sockopt *sopt, struct ip_fw_chain *chain)
 	return error;
 }
 
+
 int
-cmd_dispatch_ipfw(struct ipfw_wire_hdr *ipfw, char *txbuf, vxstate_t *state)
+cmd_udp_fill(char *txbuf, void *payload, int len, uint16_t sport, uint16_t dport, vxstate_t *state)
+{
+	struct ether_header *eh = (struct ether_header *)txbuf;
+	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
+	struct udphdr *uh = (struct udphdr *)(ip + 1);
+	void *data = (void *)(uintptr_t)(uh + 1);
+
+	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
+	/* source IP unknown, dest broadcast IP */
+	ip_fill(ip, state->vs_dflt_rte.ri_laddr.in4.s_addr, 0xffffffff,
+			len + sizeof(*uh) + sizeof(*ip), IPPROTO_UDP);
+	udp_fill(uh, sport, dport, len);
+	memcpy(data, payload, len);
+	return (len + sizeof(*uh) + sizeof(*ip) + sizeof(*eh));
+}
+
+int
+cmd_dispatch_ipfw(struct ipfw_wire_hdr *ipfw, char *txbuf, path_state_t *ps, vxstate_t *state)
 {
 	struct thread dummy;
-	socklen_t optlen;
+	intf_info_map_t &intftbl = state->vs_intf_table;
+	socklen_t optlen = 0;
 	uint64_t mac;
-	int optname, level, rc;
 	struct sockopt sopt;
-	enum sopt_dir dir;
 	void *optval  = (void *)(uintptr_t)(ipfw + 1);
-	struct ip_fw_chain *chain = NULL;
+	struct ip_fw_chain *chain;
 
-	sopt.sopt_dir = (enum sopt_dir)ipfw->dir;
-	sopt.sopt_level = ipfw->level;
-	sopt.sopt_val = optval;
-	sopt.sopt_name = ipfw->optname;
-	sopt.sopt_valsize = ipfw->optlen;
-	sopt.sopt_td = &dummy;
 	mac = ((uint64_t)ipfw->mac) & 0xFFFFFFFFFFFF;
-	/* lookup mac in state to get chain */
-	if (0 /* if found call ctl_handler with chain */ ) {
-		ctl_handler(&sopt, chain);
-		/* now respond with any changes to sopt depending on direction */
-
-		/* populate header */
-		return (1);
-	} else {
-		D("ipfw command dispatch not yet complete");
+	auto it = intftbl.find(mac);
+	if (it == intftbl.end()) {
+		ipfw->level = htonl(ENOENT);
+		ipfw->optlen = htonl(0);
+		goto done;
 	}
-	return (0);
+	chain = it->second->ii_chain;
+	sopt.sopt_dir = (enum sopt_dir)ntohl(ipfw->dir);
+	sopt.sopt_level = ntohl(ipfw->level);
+	sopt.sopt_val = optval;
+	sopt.sopt_name = ntohl(ipfw->optname);
+	sopt.sopt_valsize = ntohl(ipfw->optlen);
+	sopt.sopt_td = &dummy;
+
+	ipfw->level = htonl(ctl_handler(&sopt, chain));
+	ipfw->optlen = htonl(0);
+	ipfw->dir = htonl(sopt.sopt_dir);
+	if (sopt.sopt_dir == SOPT_GET) {
+		ipfw->optlen = htonl(sopt.sopt_valsize);
+		optlen = sopt.sopt_valsize;
+	}
+  done:
+	*(ps->ps_tx_len) = cmd_udp_fill(txbuf, ipfw, sizeof(*ipfw) + optlen,
+				   IPPORT_IPFWPS, IPPORT_IPFWPC, state);
+	return (1);
 }
 
 int
@@ -622,7 +647,7 @@ cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 		/* XXX proactively resolve the MAC address for the gateway */
 		/* ... */
 	} else if (dport == IPPORT_IPFWPS) {
-		return cmd_dispatch_ipfw(ipfw, txbuf, state);
+		return cmd_dispatch_ipfw(ipfw, txbuf, ps, state);
 	}
 	return (0);
 }
