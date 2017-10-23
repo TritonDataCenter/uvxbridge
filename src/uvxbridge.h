@@ -35,12 +35,13 @@
 #include "proto.h"
 
 #include <ipfw_exports.h>
-
+#include "datapath.h"
 
 using std::string;
 using std::pair;
 using std::map;
 #define s6_addr32 __u6_addr.__u6_addr32
+
 
 struct in6cmp {
 	bool
@@ -219,6 +220,14 @@ typedef struct vxlan_state {
 	}
 } vxstate_t;
 
+struct vxlan_state_dp;
+struct ifnet;
+struct netmap_port {
+	struct vxlan_state_dp *np_state;
+	datadir_t np_dir;
+	struct ifnet *np_ifp;
+};
+
 typedef struct vxlan_state_dp {
 	vxstate_t *vsd_state;
 
@@ -231,10 +240,20 @@ typedef struct vxlan_state_dp {
 	/* if data path - our identifier */
 	uint32_t vsd_datapath_id;
 
+	struct netmap_port vsd_ingress_port;
+
+	struct netmap_port vsd_egress_port;
+
 	vxlan_state_dp(uint32_t id, vxstate_t *state) {
 		bzero(this, sizeof(*this));
 		this->vsd_datapath_id = id;
 		this->vsd_state = state;
+		this->vsd_ingress_port.np_ifp = ifnet_alloc();
+		this->vsd_egress_port.np_ifp = ifnet_alloc();
+		this->vsd_ingress_port.np_state = this->vsd_egress_port.np_state = this;
+		this->vsd_ingress_port.np_dir = BtoA;
+		this->vsd_egress_port.np_dir = AtoB;
+		/* XXX copy ingress / egress port names to ifnam */
 	}
 } vxstate_dp_t;
 

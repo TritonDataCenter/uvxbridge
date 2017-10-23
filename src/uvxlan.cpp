@@ -25,14 +25,21 @@
  * SUCH DAMAGE.
  */
 
+extern "C" {
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/mbuf.h>
 #include <stdio.h>
 
 #include <net/ethernet.h>
 #define NETMAP_WITH_LIBS
 #include <net/netmap_user.h>
 
+struct rmlock { uint8_t pad; };
+#include <net/pfil.h>
+int ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir, struct inpcb *inp, struct ip_fw_chain *);
+
+}
 #include "uvxbridge.h"
 #include "uvxlan.h"
 #include "proto.h"
@@ -82,32 +89,13 @@ u64tomac(uint64_t smac, uint8_t *dmac)
 }
 
 char *
-get_ingress_txbuf(path_state_t *ps, vxstate_t *state)
+get_txbuf(path_state_t *ps, struct nm_desc *pa)
 {
-	struct nm_desc *pa;
 	struct netmap_ring *txring;
 	struct netmap_slot *ts;
 
-	pa = state->vs_nm_ingress;
-	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
-	if (__predict_false(nm_ring_space(txring) == 0))
+	if (__predict_false(pa == NULL))
 		return (NULL);
-	ts = &txring->slot[txring->cur];
-	ps->ps_txring = txring;
-	ps->ps_tx_len = &ts->len;
-	return NETMAP_BUF(txring, ts->buf_idx);
-}
-
-char *
-get_egress_txbuf(path_state_t *ps, vxstate_t *state)
-{
-	struct nm_desc *pa;
-	struct netmap_ring *txring;
-	struct netmap_slot *ts;
-
-	if (__predict_false(state->vs_nm_egress == NULL))
-		return (NULL);
-	pa = state->vs_nm_egress;
 	txring = NETMAP_TXRING(pa->nifp, pa->first_tx_ring);
 	if (__predict_false(nm_ring_space(txring) == 0))
 		return (NULL);
@@ -180,7 +168,7 @@ data_send_arp(uint64_t targetha, uint32_t targetip, uint64_t op, vxstate_t *stat
 	path_state_t ps;
 
 	/* get txbuf */
-	if ((txbuf = get_ingress_txbuf(&ps, state)) == NULL)
+	if ((txbuf = get_txbuf(&ps, state->vs_nm_ingress)) == NULL)
 		return;
 	ae.ae_hdr.data = op;
 	u64tomac(state->vs_ctrl_mac, ae.ae_sha);
@@ -644,7 +632,7 @@ cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 		path_state_t psgrat;
 
 		bzero(&psgrat, sizeof(path_state_t));
-		if ((txbuf_ = get_egress_txbuf(&psgrat, state)) == NULL)
+		if ((txbuf_ = get_txbuf(&psgrat, state->vs_nm_egress)) == NULL)
 			return (0);
 		/*
 		 * we have our address -- now we want to send out a
@@ -757,6 +745,58 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unuse
 	return (0);
 }
 
+void
+netmap_enqueue(struct mbuf *m, int proto __unused)
+{
+	struct netmap_port *peer = (struct netmap_port *)m->__m_peer;
+	path_state_t ps;
+	struct nm_desc *d;
+	char *txbuf;
+
+	if (peer == NULL) {
+		D("error missing peer in %p", m);
+		m_freem(m);
+	}
+	if (peer->np_dir == AtoB)
+		d = peer->np_state->vsd_state->vs_nm_egress;
+	else
+		d = peer->np_state->vsd_state->vs_nm_ingress;
+	bzero(&ps, sizeof(path_state_t));
+	if ((txbuf = get_txbuf(&ps, d)) == NULL)
+		return;
+	if (peer->np_dir == AtoB) {
+		ps.ps_rx_len = m->m_len;
+		if (vxlan_encap_v4((char *)m->m_data, txbuf, &ps, peer->np_state))
+			txring_next(&ps, *(ps.ps_tx_len));
+	} else {
+		/* XXX --- fragmentation */
+		nm_pkt_copy(m->m_data, txbuf, m->m_len);
+		txring_next(&ps, m->m_len);
+	}
+	m_freem(m);
+}
+
+static int
+ipfw_check(char *buf, uint16_t len, struct netmap_port *src, struct netmap_port *dst,
+	struct ip_fw_chain *chain)
+{
+	struct mbuf m0, *mp;
+
+	mp = &m0;
+	m0.m_flags = M_STACK;
+	m0.__m_extbuf = buf;
+	m0.__m_extlen = len;
+	m0.__m_peer = dst;
+	m0.__m_callback = netmap_enqueue;
+	m0.m_pkthdr.rcvif = src->np_ifp;
+	m0.m_data = buf;
+	m0.m_len = m0.m_pkthdr.len = len;
+	ipfw_check_frame(NULL, &mp, NULL, PFIL_IN, NULL, chain);
+	if (mp == NULL || m0.__m_peer != dst)
+		return (0);
+	return (1);
+}
+
 /*
  * If valid, encapsulate rxbuf in to txbuf
  *
@@ -773,6 +813,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	rte_t *rte = &state->vs_dflt_rte;
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
 	struct egress_cache ec;
+	struct ip_fw_chain *chain;
 	uint64_t srcmac, dstmac, targetha;
 	uint16_t sport, pktsize;
 	uint32_t vxlanid, laddr, raddr, maskraddr, maskladdr, range;
@@ -785,8 +826,12 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 		return (0);
 	if (dp_state->vsd_ecache.ec_smac == srcmac &&
 		dp_state->vsd_ecache.ec_dmac == dstmac) {
-		if (dp_state->vsd_ecache.ec_chain != NULL) {
+		chain = dp_state->vsd_ecache.ec_chain;
+		if (chain != NULL) {
 			/* XXX do ipfw_check on packet */
+			if (ipfw_check(rxbuf, ps->ps_rx_len, &dp_state->vsd_ingress_port,
+						   &dp_state->vsd_egress_port, chain) == 0)
+				return (0);
 		}
 		/* XXX VLAN only */
 		memcpy(txbuf, &dp_state->vsd_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
@@ -822,6 +867,9 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	if (it_ii->second->ii_ent.fields.flags & AE_IPFW_EGRESS) {
 		ec.ec_chain = it_ii->second->ii_chain;
 		/* XXX pass packet to ipfw_chk */
+		if (ipfw_check(rxbuf, ps->ps_rx_len, &dp_state->vsd_ingress_port,
+					   &dp_state->vsd_egress_port, ec.ec_chain) == 0)
+			return (0);
 	}
 	ec.ec_hdr.vh.vh_vxlanhdr.v_vxlanid = vxlanid;
 	/* calculate source port */
@@ -893,7 +941,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 }
 
 int
-vxlan_decap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
+vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 			   vxstate_dp_t *dp_state)
 {
 	struct vxlan_header *vh = (struct vxlan_header *)rxbuf;
@@ -913,6 +961,11 @@ vxlan_decap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 		return (0);
 	if (it->second->ii_ent.fields.flags & AE_IPFW_INGRESS) {
 		/* XXX call ipfw_check */
+		if (ipfw_check(rxbuf, ps->ps_rx_len, &dp_state->vsd_egress_port,
+					   &dp_state->vsd_ingress_port,
+					   it->second->ii_chain) == 0)
+			return (0);
+
 	}
 	/* copy encapsulated packet */
 	pktlen = ps->ps_rx_len -  sizeof(struct vxlan_header);

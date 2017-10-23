@@ -133,13 +133,13 @@ int data_dispatch_arp_vx(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_
 int vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state);
 int vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state);
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 	int data_dispatch(char *rxbuf, char *txbuf, path_state_t *, void *arg);
 	int cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *, void *arg);
 	int cmd_initiate(char *rxbuf, char *txbuf, path_state_t *, void *arg);
+	void netmap_enqueue(struct mbuf *m, int proto);
 #ifdef __cplusplus
 }
 #endif
