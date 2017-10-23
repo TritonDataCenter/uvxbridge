@@ -56,8 +56,8 @@ SRCS_NETINET	 = in_cksum.c
 IPFW_SRCS	= $(SRCS_IPFW) $(SRCS_NET) $(SRCS_NETINET)
 IPFW_SRCS += ipfw2_mod.c # bsd_compat.c
 
-IPFW_SRCS += missing.c netmap_io.c
-#session.c 
+IPFW_SRCS += missing.c
+
 IPFW_CFLAGS= -DINET
 
 E_CFLAGS += -Dradix -DNEED_ROUNDUP2
