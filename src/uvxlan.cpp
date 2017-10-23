@@ -344,19 +344,23 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 				}
 			} else {
 				ftable_t ftable;
+				intf_info_t *ii;
 				uint32_t vxlanid = sah->ae_tpa & 0xffffff;
 				uint8_t flags = sah->ae_tflags;
+				bool insert = false;
 				auto it = intftbl.find(targetha);
 
 				if (it != intftbl.end()) {
-					it->second->ii_ent.fields.vxlanid = vxlanid;
-					it->second->ii_ent.fields.flags = flags;
+					ii = it->second;
 				} else {
-					intf_info_t *ii = new intf_info();
-					it->second->ii_ent.fields.vxlanid = vxlanid;
-					it->second->ii_ent.fields.flags = flags;
-					intftbl.insert(pair<uint64_t, intf_info_t*>(targetha, ii));
+					ii = new intf_info();
+					insert = true;
 				}
+				ii->ii_ent.fields.vxlanid = vxlanid;
+				ii->ii_ent.fields.flags = flags;
+				if (insert)
+					intftbl.insert(pair<uint64_t, intf_info_t*>(targetha, ii));
+
 				auto it_ftable = ftablemap.find(sah->ae_tpa);
 				if (it_ftable == ftablemap.end())
 					ftablemap.insert(pair<uint32_t, ftable_t>(vxlanid, ftable));
