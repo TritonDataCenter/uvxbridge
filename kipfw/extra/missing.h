@@ -743,8 +743,8 @@ VNET_DECLARE(int, ip_defttl);
 
 // int ipfw_check_hook(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir, struct inpcb *inp);
 // XXX used in netmap_io.c
-int ipfw_check_packet(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir, struct inpcb *inp);
-int ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir, struct inpcb *inp);
+int ipfw_check_packet(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir, struct inpcb *inp, struct ip_fw_chain *);
+int ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir, struct inpcb *inp, struct ip_fw_chain *);
 
 /* hooks for divert */
 extern void (*ip_divert_ptr)(struct mbuf *m, int incoming);

@@ -83,9 +83,9 @@ int ipfw_chg_hook(SYSCTL_HANDLER_ARGS);
 /* Forward declarations. */
 static int ipfw_divert(struct mbuf **, int, struct ipfw_rule_ref *, int);
 int ipfw_check_packet(void *, struct mbuf **, struct ifnet *, int,
-	struct inpcb *);
+					  struct inpcb *, struct ip_fw_chain *);
 int ipfw_check_frame(void *, struct mbuf **, struct ifnet *, int,
-	struct inpcb *);
+					 struct inpcb *, struct ip_fw_chain *);
 
 #ifdef SYSCTL_NODE
 
@@ -118,13 +118,14 @@ SYSEND
  */
 int
 ipfw_check_packet(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir,
-    struct inpcb *inp)
+				  struct inpcb *inp, struct ip_fw_chain *chain)
 {
 	struct ip_fw_args args;
 	struct m_tag *tag;
 	int ipfw;
 	int ret;
 
+	args.chain = chain;
 	/* convert dir to IPFW values */
 	dir = (dir == PFIL_IN) ? DIR_IN : DIR_OUT;
 	bzero(&args, sizeof(args));
@@ -294,7 +295,7 @@ again:
  */
 int
 ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *dst, int dir,
-    struct inpcb *inp)
+				 struct inpcb *inp, struct ip_fw_chain *chain)
 {
 	struct ether_header *eh;
 	struct ether_header save_eh;
@@ -343,6 +344,7 @@ ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *dst, int dir,
 	args.next_hop = NULL;	/* we do not support forward yet	*/
 	args.next_hop6 = NULL;	/* we do not support forward yet	*/
 	args.inp = NULL;	/* used by ipfw uid/gid/jail rules	*/
+	args.chain = chain;
 	i = ipfw_chk(&args);
 	m = args.m;
 	if (m != NULL) {

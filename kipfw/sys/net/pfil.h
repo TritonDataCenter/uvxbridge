@@ -44,7 +44,7 @@ struct ifnet;
 struct inpcb;
 
 typedef	int	(*pfil_func_t)(void *, struct mbuf **, struct ifnet *, int,
-		    struct inpcb *);
+						   struct inpcb *, struct ip_fw_chain *);
 
 /*
  * The packet filter hooks are designed for anything to call them to

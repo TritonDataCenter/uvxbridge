@@ -274,9 +274,9 @@ netmap_read(struct sess *sess, void *arg)
 			// XXX ipfw_chk is slightly faster
 			//ret = ipfw_chk(&args);
 			if (hdrlen > 0) {
-				ipfw_check_packet(NULL, &args.m, NULL, PFIL_IN, NULL);
+				ipfw_check_packet(NULL, &args.m, NULL, PFIL_IN, NULL, NULL);
 			} else {
-				ipfw_check_frame(NULL, &args.m, NULL, PFIL_IN, NULL);
+				ipfw_check_frame(NULL, &args.m, NULL, PFIL_IN, NULL, NULL);
 			}
 
 			if (args.m != NULL) {	// ok. forward

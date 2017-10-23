@@ -1013,7 +1013,7 @@ ipfw_chk(struct ip_fw_args *args)
 	 */
 	int dyn_dir = MATCH_UNKNOWN;
 	ipfw_dyn_rule *q = NULL;
-	struct ip_fw_chain *chain = &V_layer3_chain;
+	struct ip_fw_chain *chain = args->chain;
 
 	/*
 	 * We store in ulp a pointer to the upper layer protocol header.

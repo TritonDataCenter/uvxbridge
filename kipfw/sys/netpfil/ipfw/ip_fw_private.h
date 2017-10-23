@@ -85,6 +85,7 @@ struct _ip6dn_args {
 struct ip_fw_args {
 	struct mbuf	*m;		/* the mbuf chain		*/
 	struct ifnet	*oif;		/* output interface		*/
+	struct ip_fw_chain *chain;
 	struct sockaddr_in *next_hop;	/* forward address		*/
 	struct sockaddr_in6 *next_hop6; /* ipv6 forward address		*/
 
