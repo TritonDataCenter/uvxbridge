@@ -315,9 +315,9 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 			memcpy(&targetha, sah->ae_tha, ETHER_ADDR_LEN);
 			auto it = intftbl.find(targetha);
 			if (it != intftbl.end()) {
-
 				reply = AE_VM_VXLANID_REPLY;
-				targetpa = it->second->ii_ent.fields.vxlanid;
+				targetpa = it->second->ii_ent.fields.flags << 24;
+				targetpa |= it->second->ii_ent.fields.vxlanid;
 			}
 			break;
 		}
@@ -344,18 +344,22 @@ cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
 				}
 			} else {
 				ftable_t ftable;
+				uint32_t vxlanid = sah->ae_tpa & 0xffffff;
+				uint8_t flags = sah->ae_tflags;
 				auto it = intftbl.find(targetha);
 
 				if (it != intftbl.end()) {
-					it->second->ii_ent.fields.vxlanid = sah->ae_tpa;
+					it->second->ii_ent.fields.vxlanid = vxlanid;
+					it->second->ii_ent.fields.flags = flags;
 				} else {
 					intf_info_t *ii = new intf_info();
-					ii->ii_ent.fields.vxlanid = sah->ae_tpa;
+					it->second->ii_ent.fields.vxlanid = vxlanid;
+					it->second->ii_ent.fields.flags = flags;
 					intftbl.insert(pair<uint64_t, intf_info_t*>(targetha, ii));
 				}
 				auto it_ftable = ftablemap.find(sah->ae_tpa);
 				if (it_ftable == ftablemap.end())
-					ftablemap.insert(pair<uint32_t, ftable_t>(sah->ae_tpa, ftable));
+					ftablemap.insert(pair<uint32_t, ftable_t>(vxlanid, ftable));
 			}
 			break;
 		}
@@ -777,6 +781,9 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 		return (0);
 	if (dp_state->vsd_ecache.ec_smac == srcmac &&
 		dp_state->vsd_ecache.ec_dmac == dstmac) {
+		if (dp_state->vsd_ecache.ec_chain != NULL) {
+			/* XXX do ipfw_check on packet */
+		}
 		/* XXX VLAN only */
 		memcpy(txbuf, &dp_state->vsd_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
 		nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
@@ -792,6 +799,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	}
 	ec.ec_smac = srcmac;
 	ec.ec_dmac = dstmac;
+	ec.ec_chain = NULL;
 	/* fill out final data -- XXX assume no VLAN */
 	*((uint64_t *)(uintptr_t)&ec.ec_hdr.vh.vh_vxlanhdr) = 0;
 	ec.ec_hdr.vh.vh_vxlanhdr.v_i = 1;
@@ -806,6 +814,10 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 		data_send_arp(targetha, 0, AE_VM_VXLANID_REQUEST, state);
 		/* send request for VXLANID */
 		return (0);
+	}
+	if (it_ii->second->ii_ent.fields.flags & AE_IPFW_EGRESS) {
+		ec.ec_chain = it_ii->second->ii_chain;
+		/* XXX pass packet to ipfw_chk */
 	}
 	ec.ec_hdr.vh.vh_vxlanhdr.v_vxlanid = vxlanid;
 	/* calculate source port */
@@ -895,6 +907,9 @@ vxlan_decap_v4(char *rxbuf, char *txbuf __unused, path_state_t *ps,
 	/* this MAC address isn't on the VXLAN that we were addressed with */
 	if (it->second->ii_ent.fields.vxlanid != rxvxlanid)
 		return (0);
+	if (it->second->ii_ent.fields.flags & AE_IPFW_INGRESS) {
+		/* XXX call ipfw_check */
+	}
 	/* copy encapsulated packet */
 	pktlen = ps->ps_rx_len -  sizeof(struct vxlan_header);
 	nm_pkt_copy(rxbuf + sizeof(*vh), txbuf, pktlen);

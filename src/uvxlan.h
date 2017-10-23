@@ -92,6 +92,9 @@ struct	arphdr {
 #define ar_tha(ap)	(((caddr_t)((ap)+1)) +   (ap)->ar_hln + (ap)->ar_pln)
 #define ar_tpa(ap)	(((caddr_t)((ap)+1)) + 2*(ap)->ar_hln + (ap)->ar_pln)
 
+#define AE_IPFW_INGRESS 0x1
+#define AE_IPFW_EGRESS	0x2
+
 struct arphdr_ether {
     union {
 		uint64_t data;
@@ -100,8 +103,18 @@ struct arphdr_ether {
     uint8_t	ae_sha[ETHER_ADDR_LEN];
     uint32_t	ae_spa;
     uint8_t	ae_tha[ETHER_ADDR_LEN];
-    uint32_t	ae_tpa;
+	union {
+		uint32_t	uae_tpa;
+		struct {
+			uint8_t usae_tvxlanid[3];
+			uint8_t usae_tflags;
+		} s;
+	} u;
 } __packed;
+
+#define ae_tpa u.uae_tpa
+#define ae_tflags u.s.usae_tflags
+#define ae_tvxlanid u.s.usae_tvxlanid
 
 
 bool nd_request(struct arphdr_ether *sae, struct arphdr_ether *dae,

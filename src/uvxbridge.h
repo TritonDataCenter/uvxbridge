@@ -72,9 +72,10 @@ typedef struct l2_table {
 typedef union vni_entry {
 	uint64_t data;
 	struct {
-		uint64_t gen:28;
-		uint64_t vlanid:12;
-		uint64_t vxlanid:24;
+		uint32_t gen:20;
+		uint32_t vlanid:12;
+		uint32_t vxlanid:24;
+		uint32_t flags:8;
 	} fields;
 } vnient_t;
 
@@ -140,6 +141,7 @@ struct egress_cache {
 	uint64_t ec_smac;
 	uint64_t ec_dmac;
 	uint64_t ec_flags;
+	struct ip_fw_chain *ec_chain;
 	union {
 		struct vxlan_header vh;
 		struct vxlan_vlan_header vvh;
