@@ -35,3 +35,8 @@ v0.4 +
  - Jumbo frames
  - additional routes / interface addresses
  - VLAN support enabled 
+
+Unscheduled:
+- adding support for JITted BPF filters in uvxbridge and VALE
+- encrypted tunnels
+- rate limiting in VALE and uvxbridge
