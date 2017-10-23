@@ -17,9 +17,6 @@ OBJPATH = $(M)/../$(OBJDIR)
 
 NETMAP_FLAGS = -DWITH_NETMAP -I$(NETMAP_INC)
 
-INCDIRS = -I$(M)/../$(OBJDIR)/include_e -DEMULATE_SYSCTL
-INCDIRS += -I$(M)/sys -I$(M)/extra/sys -I$(M)/extra/sys/contrib/pf
-
 E_CFLAGS += $(INCDIRS)
 E_CFLAGS += -include $(M)/../kipfw/extra/glue.h		# headers
 E_CFLAGS += -include $(M)/../kipfw/extra/missing.h		# headers

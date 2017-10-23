@@ -72,6 +72,11 @@ ip_fw_chain_delete(struct ip_fw_chain *chain)
 	kern_free(chain);
 }
 
+struct ifnet *
+ifnet_alloc(void)
+{
+	return calloc(sizeof(struct ifnet), 1);
+}
 /*
  * Here we allocate some global variables used in the firewall.
  */

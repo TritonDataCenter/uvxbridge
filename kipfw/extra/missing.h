@@ -32,7 +32,9 @@
 
 #ifndef _MISSING_H_
 #define _MISSING_H_
-
+#ifdef __cplusplus
+extern "C" {
+#endif
 #define KLD_MODULE	/* disable kernel dependencies */
 
 /* defined as assert */
@@ -797,4 +799,7 @@ new_session(int fd, handler_t *func, void *arg, enum flags_t flags);
 
 
 void netmap_add_port(const char *dev);
+#ifdef __cplusplus
+}
+#endif
 #endif /* !_MISSING_H_ */

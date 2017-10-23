@@ -19,7 +19,7 @@ struct ip_fw_chain *ip_fw_chain_new(void);
 void ip_fw_chain_delete(struct ip_fw_chain *chain);
 typedef int ip_fw_ctl_t(struct sockopt *, struct ip_fw_chain *);
 extern ip_fw_ctl_t *ip_fw_ctl_ptr;
-
+struct ifnet *ifnet_alloc(void);
 #ifdef __cplusplus
 }
 #endif
