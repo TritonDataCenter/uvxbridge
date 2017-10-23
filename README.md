@@ -1,5 +1,5 @@
 # uvxbridge
-user level vxlan bridge
+user level vxlan bridge and firewall
 
 uvxbridge -i \<ingress\> -e \<egress\> -c \<config\> -m \<config mac address\> -p \<provisioning agent mac address\> [-d]
 
