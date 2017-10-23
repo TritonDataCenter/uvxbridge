@@ -441,45 +441,62 @@ readn(int fd, char *buf, int len)
 }
 #endif
 
+/*
+ * Send a UDP control packet with buf as the payload
+ *
+ */
+static void
+do_tx(struct nm_desc *d, caddr_t buf, int len)
+{
+
+}
+/*
+ * Synchronously read a packet, set buf
+ * to point to the payload, and return
+ * number of bytes in the payload
+ */
+static int
+do_rx(struct nm_desc *d, caddr_t *buf)
+{
+	return (0);
+}
+
 int
 __sockopt2(struct cmd_state *s, int level, int optname, void *optval, socklen_t *optlen,
    enum sopt_dir dir)
 {
 	struct ipfw_wire_hdr r;
-	int len = optlen && optval ? *optlen : 0;
+	struct nm_desc *d;
+	caddr_t buf;
+	int bytes, len = optlen && optval ? *optlen : 0;
 	int new_errno;
 
 	ND("dir %d optlen %d level %d optname %d", dir, len, level, optname);
 	memcpy(&r.mac, &s->mac, 6);
+	d = s->desc;
 	/* send request to the server */
 	r.optlen = htonl(len);
 	r.level = htonl(level);
 	r.optname = htonl(optname);
 	r.dir = htonl(dir);
-#ifdef __unused__
-	if (writen(s, (const char *) &r, sizeof(r)))
-		return -1;	/* error writing */
-
-	/* send data, if present */
-	if (len < 0) {
-		fprintf(stderr, "%s invalid args found\n", __FUNCTION__);
-		return -1;
-	} else if (len > 0) {
-		if (writen(s, optval, len))
-			return -1;	/* error writing */
+	if (len) {
+		buf = (caddr_t)malloc(sizeof(r) + len);
+		memcpy(buf, &r, sizeof(r));
+		memcpy(buf + sizeof(r), optval, len);
+	} else
+		buf = (void *)&r;
+	do_tx(d, buf, sizeof(r) + len);
+	if (len) {
+		free(buf);
+		buf = NULL;
 	}
-
-	/* read response size and error code */
-	if (readn(s, (char *)&r, sizeof(r)))
-		return -1;	/* error reading */
-	len = ntohl(r.optlen);
-	ND("got header, datalen %d", len);
-	if (len > 0) {
-		if (readn(s, optval, len)) {
-			return -1;	/* error reading */
-		}
+	bytes = do_rx(d, &buf);
+	if (bytes) {
+		memcpy(&r, buf, sizeof(r));
+		len = ntohl(r.optlen);
+		if (len)
+			memcpy(optval, buf + sizeof(r), len);
 	}
-#endif	
 	if (optlen)
 		*optlen = ntohl(r.optlen); /* actual len */
 	new_errno = ntohl(r.level);
