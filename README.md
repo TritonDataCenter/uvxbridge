@@ -35,8 +35,12 @@ v0.5
 v0.4 +
  - rate limiting in VALE and uvxbridge
 
-Unscheduled:
+Unscheduled - but may be done to meet performance targets:
  - ptnetmap integration upstreamable
  - Jumbo frames
  - additional routes / interface addresses
- - VLAN support enabled 
+ - VLAN support enabled
+ - ipv6 support
+ - DTLS offload
+ - copy reduction
+ - conversion to more performant data structures than STL maps
