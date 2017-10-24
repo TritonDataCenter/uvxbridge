@@ -26,11 +26,12 @@ mac_parse(const char *input)
 }
 
 /*
- * beastie0:
+ * beastie0 (vale0:0):
  *
- * config:	vale0:1
- * ingress:	vale0:2
+ * ingress:	vale0:1
  * egress:	vale2:0
+ *
+ * config:	vale0:2 (provisioning agent can use vale0:3)
  * cmac:	CA:FE:00:00:BE:EF
  * pmac:	CA:FE:00:00:BA:BE
  *
@@ -42,11 +43,12 @@ mac_parse(const char *input)
  *
  * ./uvxbridge -c vale0:1 -i vale0:2 -e vale2:0 -m CA:FE:00:00:BE:EF -p CA:FE:00:00:BA:BE -t 1
  *
- * beastie1:
+ * beastie1 (vale1:0):
  *
- * config:	vale1:1
- * ingress:	vale1:2
+ * ingress:	vale1:1
  * egress:	vale2:1
+ *
+ * config:	vale1:2 (provisioning agent can use vale1:3)
  * cmac:	CA:FE:00:01:BE:EF
  * pmac:	CA:FE:00:01:BA:BE
  *
