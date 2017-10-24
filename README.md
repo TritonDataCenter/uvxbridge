@@ -22,21 +22,21 @@ v0.1 +
 v0.3
 2017.10.27 - Friday
 v0.2 +
- - smart VALE (enforces subnet IDs) works
+ - DTLS tunnel support
 
 v0.4
 2017.11.03 - Friday
 v0.3 +
- - ptnetmap integration upstreamable
+ - smart VALE (enforces subnet IDs) works
+ - adding support for JITted BPF filters in uvxbridge and VALE
 
 v0.5
 2017.11.10 - Friday
 v0.4 +
+ - rate limiting in VALE and uvxbridge
+
+Unscheduled:
+ - ptnetmap integration upstreamable
  - Jumbo frames
  - additional routes / interface addresses
  - VLAN support enabled 
-
-Unscheduled:
-- adding support for JITted BPF filters in uvxbridge and VALE
-- encrypted tunnels
-- rate limiting in VALE and uvxbridge
