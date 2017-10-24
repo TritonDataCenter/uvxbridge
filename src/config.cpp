@@ -26,6 +26,13 @@ mac_parse(const char *input)
 }
 
 /*
+ * This assumes the guests are tap50,vale0:0 and tap51,vale1:0.
+ * The datapth looks like:
+ * guest0<->vale0:0<->vale0:1<->uvxbridge<->vale2:0<->vale2:1<->uvxbridge<->vale1:1<->vale1:0<->guest1
+ *
+ * With this configuration you'll need to manually add the peer's MAC address for the private
+ * netwrk - see 'arp -s'
+ *
  * beastie0 (vale0:0):
  *
  * ingress:	vale0:1
