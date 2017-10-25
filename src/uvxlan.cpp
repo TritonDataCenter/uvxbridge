@@ -44,6 +44,8 @@ int ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir, st
 #include "uvxlan.h"
 #include "proto.h"
 #include "xxhash.h"
+#include <glue.h>
+
 
 #define AE_REQUEST		0x0100040600080100UL
 #define AE_REPLY		0x0200040600080100UL
