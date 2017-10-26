@@ -35,9 +35,11 @@ extern "C" {
 #define NETMAP_WITH_LIBS
 #include <net/netmap_user.h>
 
-struct rmlock { uint8_t pad; };
-#include <net/pfil.h>
-int ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *ifp, int dir, struct inpcb *inp, struct ip_fw_chain *);
+struct rmlock { uint8_t pad; }; /* Needed by pfil.h */
+#include <net/pfil.h> /* PFIL_IN */
+
+int ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *ifp,
+					 int dir, struct inpcb *inp, struct ip_fw_chain *);
 
 }
 #include "uvxbridge.h"
@@ -809,6 +811,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 {
 	struct ether_vlan_header *evh;
 	int hdrlen, etype;
+	vfe_t *vfe;
 	vxstate_t *state = dp_state->vsd_state;
 	intf_info_map_t &intftbl = state->vs_intf_table;
 	ftablemap_t *ftablemap = &state->vs_ftables;
@@ -816,6 +819,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
 	struct egress_cache ec;
 	struct ip_fw_chain *chain;
+	bool do_dtls;
 	uint64_t srcmac, dstmac, targetha;
 	uint16_t sport, pktsize;
 	uint32_t vxlanid, laddr, raddr, maskraddr, maskladdr, range;
@@ -895,7 +899,8 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	targetha = mactou64(evh->evl_dhost);
 	auto it_fte = it_ftable->second.find(targetha);
 	if (it_fte != it_ftable->second.end()) {
-		raddr = it_fte->second.vfe_raddr.in4.s_addr;
+		vfe = &it_fte->second;
+		raddr = vfe->vfe_raddr.in4.s_addr;
 	} else {
 		/* send RARP for ftable entry */
 		data_send_arp(targetha, 0, AE_REVREQUEST, state);
@@ -938,8 +943,16 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	memcpy(&dp_state->vsd_ecache, &ec, sizeof(struct egress_cache));
 	memcpy(txbuf, &ec.ec_hdr, sizeof(struct vxlan_header));
 	nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
-	*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
-    return (1);
+
+
+	if (!vfe->vfe_dtls) {
+		*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
+		return (1);
+	}
+	/* call encrypted channel */
+	dtls_channel_transmit(vfe->vfe_channel.get(), txbuf, state->vs_mtu /* PAD */, txbuf);
+	*(ps->ps_tx_len) = state->vs_mtu;
+	return (1);
 }
 
 int

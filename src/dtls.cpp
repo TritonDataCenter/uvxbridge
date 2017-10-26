@@ -16,17 +16,16 @@
 #include <botan/x509self.h>
 #include <botan/data_src.h>
 
+#include "dtls.h"
 
-
-
-class dtls_uvxbridge_session : public Botan::TLS::Callbacks
+class dtls_callbacks : public Botan::TLS::Callbacks
 {
 	/*
 	 * Peer IP
 	 * nm_desc for egress
 	 * any additional state
 	 */
-	
+public:
 	void
 	tls_record_received(uint64_t rec_no, const uint8_t buf[], size_t buf_len) override {
 		/* pass up to vxlan_decap */
@@ -34,11 +33,13 @@ class dtls_uvxbridge_session : public Botan::TLS::Callbacks
 	
 	void
 	tls_emit_data(const uint8_t buf[], size_t buf_len) override {
+		int offset = 10; /* setup udp and copy to offset */ 
 		/* copy data in the buffer to a UDP packet in the descriptors txring */
+		memcpy(*dc_txbufp + offset, buf, buf_len);
 	}
 
 	bool
-	tls_session_established(const Botan::TLS::Session& session) override {
+	tls_session_established(const Botan::TLS::Session& session __unused) override {
 		return false;
 	}
 	
@@ -46,7 +47,66 @@ class dtls_uvxbridge_session : public Botan::TLS::Callbacks
 	tls_alert(Botan::TLS::Alert alert) override {
 		/* closs session or log */
 	}
+
+	dtls_callbacks(char **bufp) : dc_txbufp(bufp) {}
+private:
+	char **dc_txbufp;
 };
+
+class dtls_channel final : public Botan::TLS::Channel {
+public:
+	typedef Botan::TLS::Handshake_State Handshake_State;
+	typedef Botan::TLS::Handshake_Type Handshake_Type;
+	typedef Botan::TLS::Handshake_IO Handshake_IO;
+	typedef Botan::X509_Certificate X509_Certificate;
+
+	void transmit(char *buf, size_t buf_size, char *txbuf) {
+		*this->dc_txbufp = txbuf;
+		this->send((const uint8_t *)buf, buf_size);
+		*this->dc_txbufp = NULL;
+	}
+	dtls_channel(dtls_callbacks &callbacks,
+				 Botan::TLS::Session_Manager& session_manager,
+				 Botan::Credentials_Manager& creds __unused,
+				 const Botan::TLS::Policy& policy,
+				 Botan::RandomNumberGenerator& rng,
+				 char **bufp) :
+		Botan::TLS::Channel(callbacks, session_manager, rng, policy, true, 4096),
+		dc_txbufp(bufp) {}
+	~dtls_channel() {}
+	virtual void process_handshake_msg(const Handshake_State* active_state,
+                                         Handshake_State& pending_state,
+                                         Handshake_Type type,
+							   const std::vector<uint8_t>& contents) { abort(); }
+
+	void initiate_handshake(Handshake_State& state,
+							bool force_full_renegotiation)  { abort(); }
+
+	std::vector<X509_Certificate>
+	get_peer_cert_chain(const Handshake_State& state) const { abort(); }
+
+	virtual Handshake_State* new_handshake_state(class Botan::TLS::Handshake_IO* io) { abort(); }
+
+private:
+	char **dc_txbufp;
+};
+
+dtls_channel *
+dtls_channel_alloc(Botan::TLS::Session_Manager& session_manager,
+				   Botan::Credentials_Manager& creds,
+				   const Botan::TLS::Policy& policy,
+				   Botan::RandomNumberGenerator& rng)
+{
+	char **bufp = (char **)malloc(sizeof(char *));
+	dtls_callbacks callbacks(bufp);
+	return new dtls_channel(callbacks, session_manager, creds, policy, rng, bufp);
+}
+
+void
+dtls_channel_transmit(dtls_channel *channel, char *buf, size_t buf_size, char *txbuf)
+{
+	channel->transmit(buf, buf_size, txbuf);
+}
 
 class uvxbridge_credentials_manager : public Botan::Credentials_Manager
 {
@@ -148,7 +208,8 @@ private:
 	std::vector<std::shared_ptr<Botan::Certificate_Store>> m_certstores;
 };
 
-int
+#if 0
+Botan::TLS::Channel *
 uvxbridge_server_setup(/* ... */) {
 	dtls_uvxbridge_session callbacks;
 	Botan::AutoSeeded_RNG rng;
@@ -156,17 +217,15 @@ uvxbridge_server_setup(/* ... */) {
 	uvxbridge_credentials_manager creds;
 	Botan::TLS::Strict_Policy policy;
 
-	Botan::TLS::Server server(callbacks,
-							  session_mgr,
-							  creds,
-							  policy,
-							  rng,
-							  true /* is_datagram */);
-	return (0);
-	
+	return new Botan::TLS::Server(callbacks,
+								  session_mgr,
+								  creds,
+								  policy,
+								  rng,
+								  true /* is_datagram */);
 }
 
-int
+Botan::TLS::Channel *
 uvxbridge_client_setup(/* ... */) {
 	dtls_uvxbridge_session callbacks;
 	Botan::AutoSeeded_RNG rng;
@@ -174,12 +233,12 @@ uvxbridge_client_setup(/* ... */) {
 	uvxbridge_credentials_manager creds;
 	Botan::TLS::Strict_Policy policy;
 
-	Botan::TLS::Client client(callbacks,
-							  session_mgr,
-							  creds,
-							  policy,
-							  rng,
-							  Botan::TLS::Server_Information("Joyent.net", 443),
-							  Botan::TLS::Protocol_Version::latest_dtls_version());
-	return (0);
+	return new Botan::TLS::Client(callbacks,
+								  session_mgr,
+								  creds,
+								  policy,
+								  rng,
+								  Botan::TLS::Server_Information("Joyent.net", 443),
+								  Botan::TLS::Protocol_Version::latest_dtls_version());
 }
+#endif

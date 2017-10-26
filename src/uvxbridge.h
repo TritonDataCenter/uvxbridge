@@ -32,10 +32,15 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <memory>
 #include "proto.h"
 
 #include <ipfw_exports.h>
 #include "datapath.h"
+#include <botan/tls_channel.h>
+#include "dtls.h"
+
+
 
 using std::string;
 using std::pair;
@@ -103,8 +108,10 @@ typedef union vxlan_in_addr {
 
 typedef struct vxlan_ftable_entry {
 	union vxlan_in_addr vfe_raddr;
+	std::shared_ptr<dtls_channel> vfe_channel;
 	uint64_t vfe_v6:1;
-	uint64_t vfe_gen:15;
+	uint64_t vfe_dtls:1;
+	uint64_t vfe_gen:14;
 	uint64_t vfe_expire:48;
 } vfe_t;
 
@@ -170,8 +177,10 @@ typedef struct vxlan_state {
 	l2tbl_t vs_l2_phys;
 
 	/* encap port allocation */
+	uint16_t vs_mtu;
 	uint16_t vs_min_port;
 	uint16_t vs_max_port;
+	uint16_t vs_pad;
 	uint32_t vs_seed;
 
 	/*
