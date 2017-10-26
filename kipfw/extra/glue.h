@@ -305,9 +305,13 @@ int do_connect(const char *addr, int port);
 
 struct cmd_state {
 	/* netmap state */
-	struct nm_desc *desc;
-	/* mac address we're current operating on */
-	uint64_t mac;
+	struct nm_desc *cs_desc;
+	/* MAC address of the provisioning agent (src) */
+	uint64_t cs_prov_mac;
+	/* MAC address of the configuration thread in the bridge (dst) */
+	uint64_t cs_config_mac;
+	/* MAC address we're current operating on */
+	uint64_t cs_vm_mac;
 };
 int getsockopt2(struct cmd_state *s, int lev, int optname, void *optval, socklen_t *optlen);
 int setsockopt2(struct cmd_state *s, int lev, int optname, void *optval, socklen_t optlen);

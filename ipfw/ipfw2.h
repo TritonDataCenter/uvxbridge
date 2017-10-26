@@ -278,7 +278,7 @@ int do_get3(int optname, struct _ip_fw3_opheader *op3, size_t *optlen);
 /*
  * Initialize library state with netmap descriptor
  */
-int cmd_state_init(struct nm_desc *desc);
+int cmd_state_init(struct nm_desc *desc, uint64_t prov_mac, uint64_t config_mac);
 /*
  * set current guest mac 
  */

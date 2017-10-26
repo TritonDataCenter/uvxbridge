@@ -74,18 +74,20 @@ int resvd_set_number = RESVD_SET;
 static struct cmd_state *ipfw_state = NULL;
 
 int
-cmd_state_init(struct nm_desc *desc)
+cmd_state_init(struct nm_desc *desc, uint64_t prov_mac, uint64_t config_mac)
 {
 	if ((ipfw_state = malloc(sizeof(struct cmd_state))) == NULL)
 		return (ENOMEM);
-	ipfw_state->desc = desc;
-	ipfw_state->mac = 0;
+	ipfw_state->cs_desc = desc;
+	ipfw_state->cs_prov_mac = prov_mac;
+	ipfw_state->cs_config_mac = config_mac;
+	ipfw_state->cs_vm_mac = 0;
 }
 
 void
-cmd_state_mac_set(uint64_t mac)
+cmd_state_vm_mac_set(uint64_t mac)
 {
-	ipfw_state->mac = mac;
+	ipfw_state->cs_vm_mac = mac;
 }
 
 #define	CHECK_LENGTH(v, len) do {				\
