@@ -26,7 +26,7 @@
 
 #include "uvxbridge.h"
 #include "uvxlan.h"
-
+#include <nmutil.h>
 
 struct dtls_rx_args {
 	int rc;
@@ -35,6 +35,20 @@ struct dtls_rx_args {
 	path_state_t *ps;
 	struct vxlan_state_dp *dp_state;
 };
+
+static void
+dtls_udp_fill(char *txbuf, void *payload, int len)
+{
+	struct ether_header *eh = (struct ether_header *)txbuf;
+	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
+	struct udphdr *uh = (struct udphdr *)(ip + 1);
+	void *data = (void *)(uintptr_t)(uh + 1);
+
+	/* we can reuse the ether header and ip with the len adjusted */
+	ip->ip_len = ntohs(sizeof(*ip) + sizeof(*uh) + len);
+	udp_fill(uh, 443, 443, len);
+	memcpy(data, payload, len);
+}
 
 
 class dtls_callbacks : public Botan::TLS::Callbacks
@@ -50,9 +64,7 @@ public:
 	
 	void
 	tls_emit_data(const uint8_t buf[], size_t buf_len) override {
-		int offset = 10; /* setup udp and copy to offset */ 
-		/* copy data in the buffer to a UDP packet in the descriptors txring */
-		memcpy(*dc_tx_cookie + offset, buf, buf_len);
+		dtls_udp_fill(*dc_tx_cookie, (char *)(uintptr_t)buf, buf_len);
 	}
 	bool
 	tls_session_established(const Botan::TLS::Session& session __unused) override {
