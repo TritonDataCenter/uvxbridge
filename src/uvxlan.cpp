@@ -976,12 +976,17 @@ vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 			   vxstate_dp_t *dp_state)
 {
 	struct vxlan_header *vh = (struct vxlan_header *)rxbuf;
+	struct ip *ip = &vh->vh_iphdr;
 	uint32_t rxvxlanid = vh->vh_vxlanhdr.v_vxlanid;
 	struct ether_header *eh = (struct ether_header *)(rxbuf + sizeof(*vh));
 	uint64_t dmac = mactou64(eh->ether_dhost);
 	vxstate_t *state = dp_state->vsd_state;
 	intf_info_map_t &intftbl = state->vs_intf_table;
 	uint16_t pktlen;
+
+	pktlen = min(ps->ps_rx_len,  ntohs(ip->ip_len));
+	if (__predict_false(pktlen <= sizeof(struct vxlan_header)))
+		return (0);
 
 	auto it = intftbl.find(dmac);
 	/* we have no knowledge of this MAC address */
@@ -999,7 +1004,7 @@ vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 
 	}
 	/* copy encapsulated packet */
-	pktlen = ps->ps_rx_len -  sizeof(struct vxlan_header);
+	pktlen -= sizeof(struct vxlan_header);
 	nm_pkt_copy(rxbuf + sizeof(*vh), txbuf, pktlen);
 	*(ps->ps_tx_len) = pktlen;
 	return (1);
