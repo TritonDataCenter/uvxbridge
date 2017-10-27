@@ -819,7 +819,6 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
 	struct egress_cache ec;
 	struct ip_fw_chain *chain;
-	bool do_dtls;
 	uint64_t srcmac, dstmac, targetha;
 	uint16_t sport, pktsize;
 	uint32_t vxlanid, laddr, raddr, maskraddr, maskladdr, range;
@@ -953,6 +952,23 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	dtls_channel_transmit(vfe->vfe_channel.get(), txbuf, state->vs_mtu /* PAD */, txbuf);
 	*(ps->ps_tx_len) = state->vs_mtu;
 	return (1);
+}
+
+int
+dtls_decrypt_v4(char *rxbuf, char *txbuf, path_state_t *ps,
+				vxstate_dp_t *dp_state)
+{
+	vxstate_t *state = dp_state->vsd_state;
+	struct ether_header *eh = (struct ether_header *)rxbuf;
+	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
+	vre_t *vre;
+
+	auto it = state->vs_rtable.find(ip->ip_src.s_addr);
+	if (it == state->vs_rtable.end())
+		return (0);
+	vre = &it->second;
+	/* ip->ip_src -> channel */
+	dtls_channel_receive(vre->vre_channel.get(), rxbuf, txbuf, ps, dp_state);
 }
 
 int

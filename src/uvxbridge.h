@@ -115,6 +115,10 @@ typedef struct vxlan_ftable_entry {
 	uint64_t vfe_expire:48;
 } vfe_t;
 
+typedef struct vxlan_rftable_entry {
+	std::shared_ptr<dtls_channel> vre_channel;
+} vre_t;
+
 
 #define RI_VALID	(1 << 0)
 #define RI_IPV6	(1 << 1)
@@ -129,7 +133,9 @@ typedef struct routeinfo {
 } rte_t;
 
 typedef pair<uint64_t, vfe_t> fwdent;
+typedef pair<uint32_t, vre_t> revent;
 typedef map<uint64_t, vfe_t> ftable_t;
+typedef map<uint32_t, vre_t> rtable_t;
 typedef map<uint32_t, ftable_t> ftablemap_t;
 
 struct uvxstat {
@@ -154,7 +160,6 @@ struct egress_cache {
 		struct vxlan_header vh;
 		struct vxlan_vlan_header vvh;
 	} ec_hdr;
-
 };
 
 /*
@@ -172,6 +177,9 @@ typedef struct vxlan_state {
 
 	/* forwarding table */
 	ftablemap_t vs_ftables;
+
+	/* reverse lookup table */
+	rtable_t vs_rtable;
 
 	/* phys nd table */
 	l2tbl_t vs_l2_phys;

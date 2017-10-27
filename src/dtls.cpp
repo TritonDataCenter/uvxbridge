@@ -16,7 +16,15 @@
 #include <botan/x509self.h>
 #include <botan/data_src.h>
 
+#include <arpa/inet.h>
+#include <net/ethernet.h>
+#include <netinet/ip.h>
+#include <netinet/in.h>
+
+
 #include "dtls.h"
+
+#include "uvxbridge.h"
 
 class dtls_callbacks : public Botan::TLS::Callbacks
 {
@@ -107,6 +115,16 @@ dtls_channel_transmit(dtls_channel *channel, char *buf, size_t buf_size, char *t
 {
 	channel->transmit(buf, buf_size, txbuf);
 }
+
+
+void
+dtls_channel_receive(dtls_channel *channel, char *rxbuf, char *txbuf, path_state_t *ps,
+					 struct vxlan_state_dp *dp_state)
+{
+	abort();
+
+}
+
 
 class uvxbridge_credentials_manager : public Botan::Credentials_Manager
 {
