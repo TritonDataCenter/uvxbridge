@@ -7,8 +7,8 @@
 #include <botan/data_src.h>
 #include "datapath.h"
 
-class dtls_channel;
 
+class dtls_channel;
 dtls_channel *dtls_channel_alloc(Botan::TLS::Session_Manager& session_manager,
 								 Botan::Credentials_Manager& creds __unused,
 								 const Botan::TLS::Policy& policy,

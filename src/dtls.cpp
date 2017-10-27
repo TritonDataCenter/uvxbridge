@@ -41,7 +41,7 @@ class dtls_callbacks : public Botan::TLS::Callbacks
 {
 public:
 	void
-	tls_record_received(uint64_t rec_no, const uint8_t buf[], size_t buf_len) override {
+	tls_record_received(uint64_t rec_no __unused, const uint8_t buf[], size_t buf_len) override {
 		struct dtls_rx_args *args = (struct dtls_rx_args *)this->dc_rx_cookie;
 		/* pass up to vxlan_decap */
 		args->ps->ps_rx_len = buf_len;
@@ -54,15 +54,14 @@ public:
 		/* copy data in the buffer to a UDP packet in the descriptors txring */
 		memcpy(*dc_tx_cookie + offset, buf, buf_len);
 	}
-
 	bool
 	tls_session_established(const Botan::TLS::Session& session __unused) override {
 		return false;
 	}
 	
 	void
-	tls_alert(Botan::TLS::Alert alert) override {
-		/* closs session or log */
+	tls_alert(Botan::TLS::Alert alert __unused) override {
+		/* close session or log */
 	}
 
 	dtls_callbacks(char **bufp) :
@@ -74,69 +73,53 @@ private:
 	caddr_t *dc_rx_cookie;
 };
 
-class dtls_channel final : public Botan::TLS::Channel {
-public:
-	typedef Botan::TLS::Handshake_State Handshake_State;
-	typedef Botan::TLS::Handshake_Type Handshake_Type;
-	typedef Botan::TLS::Handshake_IO Handshake_IO;
-	typedef Botan::X509_Certificate X509_Certificate;
 
+class dtls_channel {
+public:
+	dtls_channel(Botan::TLS::Session_Manager& session_manager,
+				 Botan::Credentials_Manager& creds,
+				 const Botan::TLS::Policy& policy,
+				 Botan::RandomNumberGenerator& rng) {
+		char **bufp = (char **)malloc(2*sizeof(char *));
+
+		dc_tx_cookie = bufp;
+		dc_rx_cookie = bufp+1;
+		dtls_callbacks callbacks(bufp);
+		/* XXX --- if this is a client we need to initiate a connection */
+		this->dc_channel = new Botan::TLS::Server(callbacks, session_manager, creds, policy, rng, true);
+/*
+		return new Botan::TLS::Client(callbacks,
+									  session_mgr,
+									  creds,
+									  policy,
+									  rng,
+									  Botan::TLS::Server_Information("Joyent.net", 443),
+									  Botan::TLS::Protocol_Version::latest_dtls_version());
+*/
+	}
 	void transmit(char *buf, size_t buf_size, char *txbuf) {
-		*this->dc_tx_cookie = txbuf;
-		this->send((const uint8_t *)buf, buf_size);
-		*this->dc_tx_cookie = NULL;
+		*dc_tx_cookie = txbuf;
+		this->dc_channel->send((const uint8_t *)buf, buf_size);
+		*dc_tx_cookie = NULL;
 	}
 	int receive(char *rxbuf, char *txbuf, path_state_t *ps,
 				 struct vxlan_state_dp *dp_state) {
 		struct dtls_rx_args args;
+
 		args.txbuf = txbuf;
 		args.ps = ps;
 		args.dp_state = dp_state;
 		args.rc = 0;
-		*this->dc_rx_cookie = (caddr_t)&args;
-		this->received_data((const uint8_t *)rxbuf, dp_state->vsd_state->vs_mtu);
-		*this->dc_rx_cookie = NULL;
+		*dc_rx_cookie = (caddr_t)&args;
+		dc_channel->received_data((const uint8_t *)rxbuf, dp_state->vsd_state->vs_mtu);
+		*dc_rx_cookie = NULL;
 		return (args.rc);
 	}
-	dtls_channel(dtls_callbacks &callbacks,
-				 Botan::TLS::Session_Manager& session_manager,
-				 Botan::Credentials_Manager& creds __unused,
-				 const Botan::TLS::Policy& policy,
-				 Botan::RandomNumberGenerator& rng,
-				 char **bufp) :
-		Botan::TLS::Channel(callbacks, session_manager, rng, policy, true, 4096),
-		dc_tx_cookie(bufp),
-		dc_rx_cookie(bufp+1) {}
-
-	~dtls_channel() {}
-	virtual void process_handshake_msg(const Handshake_State* active_state,
-                                         Handshake_State& pending_state,
-                                         Handshake_Type type,
-							   const std::vector<uint8_t>& contents) { abort(); }
-
-	void initiate_handshake(Handshake_State& state,
-							bool force_full_renegotiation)  { abort(); }
-
-	std::vector<X509_Certificate>
-	get_peer_cert_chain(const Handshake_State& state) const { abort(); }
-
-	virtual Handshake_State* new_handshake_state(class Botan::TLS::Handshake_IO* io) { abort(); }
-
 private:
+	Botan::TLS::Channel *dc_channel;
 	caddr_t *dc_tx_cookie;
 	caddr_t *dc_rx_cookie;
 };
-
-dtls_channel *
-dtls_channel_alloc(Botan::TLS::Session_Manager& session_manager,
-				   Botan::Credentials_Manager& creds,
-				   const Botan::TLS::Policy& policy,
-				   Botan::RandomNumberGenerator& rng)
-{
-	char **bufp = (char **)malloc(2*sizeof(char *));
-	dtls_callbacks callbacks(bufp);
-	return new dtls_channel(callbacks, session_manager, creds, policy, rng, bufp);
-}
 
 void
 dtls_channel_transmit(dtls_channel *channel, char *buf, size_t buf_size, char *txbuf)
@@ -144,14 +127,12 @@ dtls_channel_transmit(dtls_channel *channel, char *buf, size_t buf_size, char *t
 	channel->transmit(buf, buf_size, txbuf);
 }
 
-
 int
 dtls_channel_receive(dtls_channel *channel, char *rxbuf, char *txbuf, path_state_t *ps,
 					 struct vxlan_state_dp *dp_state)
 {
 	return channel->receive(rxbuf, txbuf, ps, dp_state);
 }
-
 
 class uvxbridge_credentials_manager : public Botan::Credentials_Manager
 {
@@ -253,37 +234,3 @@ private:
 	std::vector<std::shared_ptr<Botan::Certificate_Store>> m_certstores;
 };
 
-#if 0
-Botan::TLS::Channel *
-uvxbridge_server_setup(/* ... */) {
-	dtls_uvxbridge_session callbacks;
-	Botan::AutoSeeded_RNG rng;
-	Botan::TLS::Session_Manager_In_Memory session_mgr(rng);
-	uvxbridge_credentials_manager creds;
-	Botan::TLS::Strict_Policy policy;
-
-	return new Botan::TLS::Server(callbacks,
-								  session_mgr,
-								  creds,
-								  policy,
-								  rng,
-								  true /* is_datagram */);
-}
-
-Botan::TLS::Channel *
-uvxbridge_client_setup(/* ... */) {
-	dtls_uvxbridge_session callbacks;
-	Botan::AutoSeeded_RNG rng;
-	Botan::TLS::Session_Manager_In_Memory session_mgr(rng);
-	uvxbridge_credentials_manager creds;
-	Botan::TLS::Strict_Policy policy;
-
-	return new Botan::TLS::Client(callbacks,
-								  session_mgr,
-								  creds,
-								  policy,
-								  rng,
-								  Botan::TLS::Server_Information("Joyent.net", 443),
-								  Botan::TLS::Protocol_Version::latest_dtls_version());
-}
-#endif
