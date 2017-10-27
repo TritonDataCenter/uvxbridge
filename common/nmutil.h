@@ -1,4 +1,11 @@
-static uint64_t
+#ifndef _COMMON_NMUTIL_H_
+#define _COMMON_NMUTIL_H_
+
+#define NETMAP_WITH_LIBS
+#include <net/netmap_user.h>
+
+
+static __inline uint64_t
 mactou64(uint8_t *mac)
 {
 	uint64_t targetha = 0;
@@ -12,7 +19,7 @@ mactou64(uint8_t *mac)
 	return (targetha);
 }
 
-static void
+static __inline void
 u64tomac(uint64_t smac, uint8_t *dmac)
 {
 	uint16_t *src, *dst;
@@ -24,7 +31,7 @@ u64tomac(uint64_t smac, uint8_t *dmac)
 	dst[2] = src[2];
 }
 
-char *
+static __inline char *
 get_txbuf(path_state_t *ps, struct nm_desc *pa)
 {
 	struct netmap_ring *txring;
@@ -41,7 +48,7 @@ get_txbuf(path_state_t *ps, struct nm_desc *pa)
 	return NETMAP_BUF(txring, ts->buf_idx);
 }
 
-void
+static __inline void
 txring_next(path_state_t *ps, uint16_t pktlen)
 {
 	struct netmap_ring *txring = ps->ps_txring;
@@ -67,7 +74,7 @@ eh_fill(struct ether_header *eh, uint64_t smac, uint64_t dmac, uint16_t type)
 	eh->ether_type = htons(type);
 }
 
-static void
+static __inline void
 ip_fill(struct ip *ip, uint32_t sip, uint32_t dip, uint16_t len, uint8_t proto)
 {
 	ip->ip_v = 4;
@@ -84,7 +91,7 @@ ip_fill(struct ip *ip, uint32_t sip, uint32_t dip, uint16_t len, uint8_t proto)
 	ip->ip_dst.s_addr = dip;
 }
 
-static void
+static __inline void
 udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
 {
 	uh->uh_sport = htons(sport);
@@ -92,3 +99,4 @@ udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
 	uh->uh_ulen = htons(len + sizeof(*uh));
 	uh->uh_sum = 0; /* XXX */
 }
+#endif
