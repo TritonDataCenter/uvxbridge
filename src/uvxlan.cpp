@@ -32,8 +32,6 @@ extern "C" {
 #include <stdio.h>
 
 #include <net/ethernet.h>
-#define NETMAP_WITH_LIBS
-#include <net/netmap_user.h>
 
 struct rmlock { uint8_t pad; }; /* Needed by pfil.h */
 #include <net/pfil.h> /* PFIL_IN */
