@@ -63,8 +63,9 @@ struct dhcp {
 #define IPPORT_IPFWPS			6666 /* unused */
 #define IPPORT_IPFWPC			6667 /* unused */
 
-#define VXLAN_DPORT	4789
+#define VXLAN_DPORT				4789
 
+#define DTLS_DPORT				443
 /*
  *   0                   1                   2                   3
  *   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1

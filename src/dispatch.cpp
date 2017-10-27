@@ -248,7 +248,27 @@ cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 	}
 	return (count);
 }
+static int
+udp_ingress(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
+{
+	struct ether_header *eh = (struct ether_header *)rxbuf;
+	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
+	struct udphdr *uh = (struct udphdr *)(ip + (ip->ip_hl << 2));
+	uint16_t dport = ntohs(uh->uh_dport);
 
+	switch (dport) {
+		case DTLS_DPORT:
+			/* XXX decrypt */
+			break;
+		case VXLAN_DPORT:
+			return vxlan_decap_v4(rxbuf, txbuf, ps, state);
+			break;
+		default:
+			/* XXX log */
+			return (0);
+			break;
+	}
+}
 
 static int
 ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
@@ -267,7 +287,7 @@ ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state
 			return data_dispatch_arp_phys(rxbuf, txbuf, ps, state);
 			break;
 		case ETHERTYPE_IP:
-			return vxlan_decap_v4(rxbuf, txbuf, ps, state);
+			return udp_ingress(rxbuf, txbuf, ps, state);
 			break;
 		case ETHERTYPE_IPV6:
 			/* not yet supported */
