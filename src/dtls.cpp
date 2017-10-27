@@ -25,25 +25,34 @@
 #include "dtls.h"
 
 #include "uvxbridge.h"
+#include "uvxlan.h"
+
+
+struct dtls_rx_args {
+	int rc;
+	int pad;
+	char *txbuf;
+	path_state_t *ps;
+	struct vxlan_state_dp *dp_state;
+};
+
 
 class dtls_callbacks : public Botan::TLS::Callbacks
 {
-	/*
-	 * Peer IP
-	 * nm_desc for egress
-	 * any additional state
-	 */
 public:
 	void
 	tls_record_received(uint64_t rec_no, const uint8_t buf[], size_t buf_len) override {
+		struct dtls_rx_args *args = (struct dtls_rx_args *)this->dc_rx_cookie;
 		/* pass up to vxlan_decap */
+		args->ps->ps_rx_len = buf_len;
+		args->rc = vxlan_decap_v4((char *)(uintptr_t)(buf), args->txbuf, args->ps, args->dp_state);
 	}
 	
 	void
 	tls_emit_data(const uint8_t buf[], size_t buf_len) override {
 		int offset = 10; /* setup udp and copy to offset */ 
 		/* copy data in the buffer to a UDP packet in the descriptors txring */
-		memcpy(*dc_txbufp + offset, buf, buf_len);
+		memcpy(*dc_tx_cookie + offset, buf, buf_len);
 	}
 
 	bool
@@ -56,9 +65,13 @@ public:
 		/* closs session or log */
 	}
 
-	dtls_callbacks(char **bufp) : dc_txbufp(bufp) {}
+	dtls_callbacks(char **bufp) :
+		dc_tx_cookie(bufp),
+		dc_rx_cookie(bufp+1)
+		{}
 private:
-	char **dc_txbufp;
+	caddr_t *dc_tx_cookie;
+	caddr_t *dc_rx_cookie;
 };
 
 class dtls_channel final : public Botan::TLS::Channel {
@@ -69,9 +82,21 @@ public:
 	typedef Botan::X509_Certificate X509_Certificate;
 
 	void transmit(char *buf, size_t buf_size, char *txbuf) {
-		*this->dc_txbufp = txbuf;
+		*this->dc_tx_cookie = txbuf;
 		this->send((const uint8_t *)buf, buf_size);
-		*this->dc_txbufp = NULL;
+		*this->dc_tx_cookie = NULL;
+	}
+	int receive(char *rxbuf, char *txbuf, path_state_t *ps,
+				 struct vxlan_state_dp *dp_state) {
+		struct dtls_rx_args args;
+		args.txbuf = txbuf;
+		args.ps = ps;
+		args.dp_state = dp_state;
+		args.rc = 0;
+		*this->dc_rx_cookie = (caddr_t)&args;
+		this->received_data((const uint8_t *)rxbuf, dp_state->vsd_state->vs_mtu);
+		*this->dc_rx_cookie = NULL;
+		return (args.rc);
 	}
 	dtls_channel(dtls_callbacks &callbacks,
 				 Botan::TLS::Session_Manager& session_manager,
@@ -80,7 +105,9 @@ public:
 				 Botan::RandomNumberGenerator& rng,
 				 char **bufp) :
 		Botan::TLS::Channel(callbacks, session_manager, rng, policy, true, 4096),
-		dc_txbufp(bufp) {}
+		dc_tx_cookie(bufp),
+		dc_rx_cookie(bufp+1) {}
+
 	~dtls_channel() {}
 	virtual void process_handshake_msg(const Handshake_State* active_state,
                                          Handshake_State& pending_state,
@@ -96,7 +123,8 @@ public:
 	virtual Handshake_State* new_handshake_state(class Botan::TLS::Handshake_IO* io) { abort(); }
 
 private:
-	char **dc_txbufp;
+	caddr_t *dc_tx_cookie;
+	caddr_t *dc_rx_cookie;
 };
 
 dtls_channel *
@@ -105,7 +133,7 @@ dtls_channel_alloc(Botan::TLS::Session_Manager& session_manager,
 				   const Botan::TLS::Policy& policy,
 				   Botan::RandomNumberGenerator& rng)
 {
-	char **bufp = (char **)malloc(sizeof(char *));
+	char **bufp = (char **)malloc(2*sizeof(char *));
 	dtls_callbacks callbacks(bufp);
 	return new dtls_channel(callbacks, session_manager, creds, policy, rng, bufp);
 }
@@ -117,12 +145,11 @@ dtls_channel_transmit(dtls_channel *channel, char *buf, size_t buf_size, char *t
 }
 
 
-void
+int
 dtls_channel_receive(dtls_channel *channel, char *rxbuf, char *txbuf, path_state_t *ps,
 					 struct vxlan_state_dp *dp_state)
 {
-	abort();
-
+	return channel->receive(rxbuf, txbuf, ps, dp_state);
 }
 
 

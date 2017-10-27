@@ -16,7 +16,7 @@ dtls_channel *dtls_channel_alloc(Botan::TLS::Session_Manager& session_manager,
 
 
 void dtls_channel_transmit(dtls_channel *channel, char *buf, size_t buf_size, char *txbuf);
-void dtls_channel_receive(dtls_channel *channel, char *rxbuf, char *txbuf, path_state_t *ps,
+int dtls_channel_receive(dtls_channel *channel, char *rxbuf, char *txbuf, path_state_t *ps,
 						  struct vxlan_state_dp *);
 
 #endif
