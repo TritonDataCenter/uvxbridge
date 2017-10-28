@@ -67,9 +67,27 @@ cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 				l2tbl.l2t_v4.erase(are->ar_pa);
 		}
 			break;
-		case CMD_FTE_REQUEST:
+		case CMD_FTE_REQUEST: {
+			struct fte_request *frq = (struct fte_request *)rxdata;
+			struct fte_reply *fre = (struct fte_reply *)txdata;
+			uint64_t mac = mactou64(frq->fr_ha);
+			op = CMD_FTE_REPLY;
+			auto ftable_it = ftablemap.find(frq->fr_vxlanid);
+			if (ftable_it == ftablemap.end()) {
+				rc = ENOENT;
+				break;
+			}
+			auto it = ftable_it->second.find(mac);
+			if (it != ftable_it->second.end() && it->second.vfe_v6 == 0) {
+				fre->fr_pa = it->second.vfe_raddr.in4.s_addr;
+			} else
+				fre->fr_pa = 0;
+			u64tomac(mac, fre->fr_ha);
+			fre->fr_vxlanid = frq->frq_vxlanid;
+			size = sizeof(*fre);
+		}
 			break;
-		case CMD_FTE_REPLY:			
+		case CMD_FTE_REPLY:
 			break;
 		case CMD_VM_INTF_REQUEST:
 			break;
@@ -87,5 +105,6 @@ cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 			break;
 	}
 	uvxcmd_fill(txbuf, state->vs_ctrl_mac, state->vs_prov_mac, op, rc, uh->uh_seqno);
+	*ps->ps_tx_len = sizeof(struct ether_header) + sizeof(struct uvxcmd_header) + size;
 	return (1);
 }

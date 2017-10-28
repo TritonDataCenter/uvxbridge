@@ -21,6 +21,17 @@ struct arp_reply {
 	uint8_t ar_ha[ETHER_ADDR_LEN];
 };
 
+struct fte_request {
+	uint32_t fr_vxlanid;
+	uint8_t fr_ha[ETHER_ADDR_LEN];
+};
+
+struct fte_reply {
+	uint32_t fr_pa;
+	uint32_t fr_vxlanid;
+	uint8_t fr_ha[ETHER_ADDR_LEN];
+};
+
 struct vm_intf_request {
 	uint8_t vir_ha[ETHER_ADDR_LEN];
 };
