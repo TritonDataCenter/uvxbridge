@@ -37,8 +37,6 @@
 
 #include <ipfw_exports.h>
 #include "datapath.h"
-#include <botan/tls_channel.h>
-#include "dtls.h"
 
 
 
@@ -46,7 +44,7 @@ using std::string;
 using std::pair;
 using std::map;
 #define s6_addr32 __u6_addr.__u6_addr32
-
+class dtls_channel;
 
 struct in6cmp {
 	bool

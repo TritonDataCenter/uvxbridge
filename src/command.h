@@ -6,10 +6,10 @@
 #define UVXMAGIC				0xABADCAFE
 
 struct uvxcmd_header {
-	uint32_t uh_magic;
-	uint8_t	uh_op;
-	uint8_t	uh_rc;
 	uint16_t uh_seqno;
+	uint16_t uh_op;
+	uint16_t uh_rc;
+	uint32_t uh_magic;
 };
 
 struct arp_request {
@@ -37,8 +37,8 @@ struct vm_intf_request {
 };
 
 struct vm_intf_reply {
-	uint32_t vir_vxlanid;
 	uint16_t vir_vlanid;
+	uint32_t vir_vxlanid;
 	uint8_t	vir_ha[ETHER_ADDR_LEN];
 	uint32_t vir_flags;
 };
@@ -51,6 +51,14 @@ struct dtls_configure {
 struct dtls_query {
 	struct in_addr dc_pa;
 	/* TBD - key state etc */
+};
+
+
+struct route_configure {
+	uint32_t rc_lpa;
+	uint32_t rc_rpa;
+	uint16_t rc_prefixlen;
+	uint16_t rc_flags;
 };
 
 struct ipfw_cmd {
@@ -71,7 +79,11 @@ struct ipfw_cmd {
 #define CMD_DTLS_CONFIGURE	0x7
 #define CMD_DTLS_QUERY		0x8
 
-#define CMD_IPFW			0x9
+#define CMD_ROUTE_CONFIGURE	0x9
+#define CMD_ROUTE_QUERY		0xA
+
+#define CMD_IPFW			0xB
+#define CMD_HEARTBEAT		0xC
 
 void uvxcmd_fill(char *txbuf, uint64_t smac, uint64_t dmac, uint32_t op);
 
