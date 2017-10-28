@@ -117,8 +117,7 @@ struct arphdr_ether {
 #define ae_tvxlanid u.s.usae_tvxlanid
 
 
-bool nd_request(struct arphdr_ether *sae, struct arphdr_ether *dae,
-		vxstate_t &state, l2tbl_t &tbl);
+
 int cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
 int cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
 
@@ -140,6 +139,7 @@ extern "C" {
 	int cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *, void *arg);
 	int cmd_initiate(char *rxbuf, char *txbuf, path_state_t *, void *arg);
 	void netmap_enqueue(struct mbuf *m, int proto);
+	int cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg);
 #ifdef __cplusplus
 }
 #endif

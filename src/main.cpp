@@ -41,6 +41,7 @@
 
 #include "uvxbridge.h"
 #include "uvxlan.h"
+#include "command.h"
 
 #include <machine/atomic.h>
 
@@ -212,7 +213,7 @@ main(int argc, char *const argv[])
 	cmd_port_args.da_pa_name = config;
 	cmd_port_args.da_pb_name = NULL;
 	cmd_port_args.da_pa = &state->vs_nm_config;
-	cmd_port_args.da_rx_dispatch = cmd_dispatch;
+	cmd_port_args.da_rx_dispatch = cmd_dispatch_config;
 	cmd_port_args.da_tx_dispatch = cmd_initiate;
 	cmd_port_args.da_poll_timeout = 1000;
 

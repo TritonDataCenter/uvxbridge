@@ -175,42 +175,6 @@ route_update_handler(cmdmap_t &map, uint64_t seqno, vxstate_t &state, string &re
 #endif
 
 int
-cmd_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *state)
-{
-	struct ether_header *eh;
-	vxstate_t *vs = (vxstate_t *)state;
-	uint64_t dmac;
-	int etype;
-
-	eh = (struct ether_header *)rxbuf;
-	etype = ntohs(eh->ether_type);
-	dmac = le64toh(*(uint64_t *)(uintptr_t)(rxbuf))& 0xffffffffffff;
-
-	if (dmac != vs->vs_ctrl_mac) {
-		if (debug)
-			D("received control message to %lx expect %lx",	
-			  dmac, vs->vs_ctrl_mac);
-		/* XXX check source mac too */
-		if (debug < 2)
-			return 0;
-	}
-	switch(etype) {
-		case ETHERTYPE_ARP:
-			return cmd_dispatch_arp(rxbuf, txbuf, ps, vs);
-			break;
-		case ETHERTYPE_IP:
-			if (cmd_dispatch_ip(rxbuf, txbuf, ps, vs))
-				return 1;
-			break;
-		default:
-			D("%s unrecognized packet type %x len: %d\n", __func__, etype, ps->ps_rx_len);
-			/* we only support ipv4 - XXX */
-			/* UNHANDLED */;
-	}
-	return 0;
-}
-
-int
 cmd_initiate(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 {
 	vxstate_t *oldstate, *newstate, *state = (vxstate_t *)arg;
