@@ -1,3 +1,5 @@
+#include "dtls.h"
+
 extern "C" {
 #include <glue.h>
 
@@ -352,7 +354,31 @@ cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 			}
 		}
 			break;
-		case CMD_DTLS_CONFIGURE:
+		case CMD_DTLS_SERVCONF: {
+			struct dtls_configure_server *dcs = (struct dtls_configure_server *)rxdata;
+			int dp_count = state->vs_datapath_count;
+			vxstate_dp_t *dp_state;
+			int i, j;
+
+			for (i = 0; i < dp_count; i++) {
+				dp_state = state->vs_dp_states[i];
+				dp_state->vsd_channel = dtls_channel_alloc(
+					dp_state->vsd_session_mgr,
+					dcs->dcs_psk,
+					dp_state->vsd_policy,
+					dp_state->vsd_rng);
+
+				if (dp_state->vsd_channel == NULL)
+					break;
+			}
+			if (i != dp_count) {
+				for (j = 0; j < i; j++)
+					state->vs_dp_states[j]->vsd_channel = NULL;
+				rc = ENOMEM;
+			}
+		}
+			break;
+		case CMD_DTLS_CLICONF:
 			rc = ENOSYS;
 			break;
 		case CMD_DTLS_QUERY:

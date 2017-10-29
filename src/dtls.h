@@ -6,14 +6,21 @@
 #include <botan/credentials_manager.h>
 #include <botan/data_src.h>
 #include "datapath.h"
+#define UVX_KEYSIZE 32
 
 
 class dtls_channel;
 dtls_channel *dtls_channel_alloc(Botan::TLS::Session_Manager& session_manager,
-								 Botan::Credentials_Manager& creds __unused,
+								 char key[UVX_KEYSIZE],
 								 const Botan::TLS::Policy& policy,
 								 Botan::RandomNumberGenerator& rng);
 
+dtls_channel *dtls_channel_alloc(Botan::TLS::Session_Manager& session_manager,
+								 char key[UVX_KEYSIZE],
+								 const Botan::TLS::Policy& policy,
+								 Botan::RandomNumberGenerator& rng,
+								 char *addr,
+								 uint16_t port);
 
 void dtls_channel_transmit(dtls_channel *channel, char *buf, size_t buf_size, char *txbuf);
 int dtls_channel_receive(dtls_channel *channel, char *rxbuf, char *txbuf, path_state_t *ps,

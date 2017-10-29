@@ -38,6 +38,9 @@
 #include <ipfw_exports.h>
 #include "datapath.h"
 
+#include <botan/tls_session_manager.h>
+#include <botan/tls_policy.h>
+#include <botan/auto_rng.h>
 
 
 using std::string;
@@ -247,6 +250,12 @@ struct netmap_port {
 typedef struct vxlan_state_dp {
 	vxstate_t *vsd_state;
 
+	/* server channel */
+	dtls_channel *vsd_channel;
+	Botan::AutoSeeded_RNG vsd_rng;
+	Botan::TLS::Session_Manager_In_Memory vsd_session_mgr;
+	Botan::TLS::Policy vsd_policy;
+
 	/* egress cache if next == prev */
 	struct egress_cache vsd_ecache;
 
@@ -260,9 +269,12 @@ typedef struct vxlan_state_dp {
 
 	struct netmap_port vsd_egress_port;
 
-	vxlan_state_dp(uint32_t id, vxstate_t *state) {
-		bzero(this, sizeof(*this));
-		this->vsd_datapath_id = id;
+	vxlan_state_dp(uint32_t id, vxstate_t *state) :
+		vsd_state(state),
+		vsd_session_mgr(this->vsd_rng),
+		vsd_policy(Botan::TLS::Strict_Policy()),
+		vsd_datapath_id(id) {
+		bzero(&this->vsd_stats, sizeof(struct uvxstat));
 		this->vsd_state = state;
 		this->vsd_ingress_port.np_ifp = ifnet_alloc();
 		this->vsd_egress_port.np_ifp = ifnet_alloc();

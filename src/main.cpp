@@ -39,6 +39,7 @@
 #include <unistd.h>
 #include <pthread.h>
 
+#include "dtls.h"
 #include "uvxbridge.h"
 #include "uvxlan.h"
 #include "command.h"
