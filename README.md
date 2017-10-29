@@ -27,20 +27,20 @@ v0.2 +
 v0.4
 2017.11.03 - Friday
 v0.3 +
- - smart VALE (enforces subnet IDs) works
- - adding support for JITted BPF filters in uvxbridge and VALE
+ - ipv6 support
+ - additional routes / interface addresses
 
 v0.5
 2017.11.10 - Friday
 v0.4 +
- - rate limiting in VALE and uvxbridge
+ - smart VALE (enforces subnet IDs) works
+ - adding support for JITted BPF filters in uvxbridge and VALE
 
 Unscheduled - but may be done to meet performance targets:
+ - rate limiting in VALE and uvxbridge
  - ptnetmap integration upstreamable
  - Jumbo frames
- - additional routes / interface addresses
  - VLAN support enabled
- - ipv6 support
  - DTLS offload
  - copy reduction
  - conversion to more performant data structures than STL maps
