@@ -44,11 +44,11 @@ struct vm_intf_reply {
 
 struct dtls_configure_client {
 	struct in_addr dcc_pa;
-	uint8_t dcc_psk[UVX_KEYSIZE];
+	char dcc_psk[UVX_KEYSIZE];
 };
 
 struct dtls_configure_server {
-	uint8_t dcs_psk[UVX_KEYSIZE];
+	char dcs_psk[UVX_KEYSIZE];
 };
 
 struct dtls_query {

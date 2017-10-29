@@ -130,11 +130,12 @@ public:
 				 char *addr,
 				 uint16_t port) {
 		char **bufp = (char **)malloc(2*sizeof(char *));
+		dtls_callbacks callbacks(bufp);
+		uvxbridge_credentials_manager creds(key);
 
 		dc_tx_cookie = bufp;
 		dc_rx_cookie = bufp+1;
-		dtls_callbacks callbacks(bufp);
-		uvxbridge_credentials_manager creds(key);
+
 		/* XXX --- if this is a client we need to initiate a connection */
 		this->dc_channel = new Botan::TLS::Client(callbacks,
 									  session_manager,
@@ -143,7 +144,6 @@ public:
 									  rng,
 									  Botan::TLS::Server_Information(addr, port),
 									  Botan::TLS::Protocol_Version::latest_dtls_version());
-
 	}
 	~dtls_channel() {
 		delete dc_channel;
@@ -171,6 +171,26 @@ private:
 	caddr_t *dc_tx_cookie;
 	caddr_t *dc_rx_cookie;
 };
+
+dtls_channel *
+dtls_channel_alloc(Botan::TLS::Session_Manager& session_manager,
+				   char key[UVX_KEYSIZE],
+				   const Botan::TLS::Policy& policy,
+				   Botan::RandomNumberGenerator& rng)
+{
+	return new dtls_channel(session_manager, key, policy, rng);
+}
+
+dtls_channel *
+dtls_channel_alloc(Botan::TLS::Session_Manager& session_manager,
+				   char key[UVX_KEYSIZE],
+				   const Botan::TLS::Policy& policy,
+				   Botan::RandomNumberGenerator& rng,
+				   char *addr,
+				   uint16_t port)
+{
+	return new dtls_channel(session_manager, key, policy, rng, addr, port);
+}
 
 void
 dtls_channel_transmit(dtls_channel *channel, char *buf, size_t buf_size, char *txbuf)
