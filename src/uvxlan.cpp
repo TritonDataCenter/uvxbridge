@@ -533,3 +533,95 @@ vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	*(ps->ps_tx_len) = pktlen;
 	return (1);
 }
+
+static int
+udp_ingress(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
+{
+	struct ether_header *eh = (struct ether_header *)rxbuf;
+	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
+	struct udphdr *uh = (struct udphdr *)(ip + (ip->ip_hl << 2));
+	uint16_t dport = ntohs(uh->uh_dport);
+
+	switch (dport) {
+		case DTLS_DPORT:
+			/* XXX decrypt */
+			return dtls_decrypt_v4(rxbuf, txbuf, ps, state);
+			break;
+		case VXLAN_DPORT:
+			return vxlan_decap_v4(rxbuf, txbuf, ps, state);
+			break;
+		default:
+			/* XXX log */
+			return (0);
+			break;
+	}
+}
+
+static int
+ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
+{
+	struct ether_vlan_header *evh;
+	int etype;
+
+	evh = (struct ether_vlan_header *)(rxbuf);
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN))
+		etype = ntohs(evh->evl_proto);
+	else
+		etype = ntohs(evh->evl_encap_proto);
+
+	switch (etype) {
+		case ETHERTYPE_ARP:
+			return data_dispatch_arp_phys(rxbuf, txbuf, ps, state);
+			break;
+		case ETHERTYPE_IP:
+			return udp_ingress(rxbuf, txbuf, ps, state);
+			break;
+		case ETHERTYPE_IPV6:
+			/* not yet supported */
+			break;
+		default:
+			printf("%s unrecognized packet type %x len: %d\n", __func__, etype, ps->ps_rx_len);
+			break;
+	}
+	return (0);
+}
+
+static int
+egress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
+{
+	struct ether_vlan_header *evh;
+	int etype;
+
+	evh = (struct ether_vlan_header *)(rxbuf);
+	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN))
+		etype = ntohs(evh->evl_proto);
+	else
+		etype = ntohs(evh->evl_encap_proto);
+
+	switch (etype) {
+		case ETHERTYPE_ARP:
+			data_dispatch_arp_vx(rxbuf, txbuf, ps, state);
+			break;
+		case ETHERTYPE_IP:
+			return vxlan_encap_v4(rxbuf, txbuf, ps, state);
+			break;
+		case ETHERTYPE_IPV6:
+			/* not yet supported */
+			break;
+		default:
+			printf("%s unrecognized packet type %x len: %d\n", __func__, etype, ps->ps_rx_len);
+			break;
+	}
+	return (0);
+}
+
+int
+data_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
+{
+	vxstate_dp_t *state = (vxstate_dp_t *)arg;
+
+	if (ps->ps_dir == AtoB)
+		return egress_dispatch(rxbuf, txbuf, ps, state);
+	else
+		return ingress_dispatch(rxbuf, txbuf, ps, state);
+}

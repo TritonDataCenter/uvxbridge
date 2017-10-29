@@ -1,8 +1,7 @@
 .include "../Makefile.inc"
 
 PROG_CXX=uvxbridge
-SRCS=main.cpp dispatch.cpp uvxlan.cpp xxhash.c config.cpp dtls.cpp \
-	uvxcommand.cpp
+SRCS=main.cpp uvxlan.cpp xxhash.c config.cpp dtls.cpp uvxcommand.cpp
 LDADD= -L../kipfw -lkipfw -L/usr/local/lib -lbotan-2 \
 	-L${.CURDIR}/../common -lnmutil
 LDFLAGS+=-pthread 
