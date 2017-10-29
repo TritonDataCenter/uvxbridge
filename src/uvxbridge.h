@@ -120,6 +120,7 @@ typedef struct vxlan_rftable_entry {
 
 #define RI_VALID	(1 << 0)
 #define RI_IPV6	(1 << 1)
+#define RI_DO_GRAT	(1 << 2)
 
 typedef struct routeinfo {
 	vxin_t		ri_mask;

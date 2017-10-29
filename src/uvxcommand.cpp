@@ -19,6 +19,7 @@ struct rmlock { uint8_t pad; }; /* Needed by pfil.h */
 #include "uvxlan.h"
 extern int debug;
 
+#define AE_REPLY		0x0200040600080100UL
 
 void
 uvxcmd_fill(char *txbuf, uint64_t smac, uint64_t dmac, uint16_t op, uint16_t rc, uint16_t seqno)
@@ -31,6 +32,30 @@ uvxcmd_fill(char *txbuf, uint64_t smac, uint64_t dmac, uint16_t op, uint16_t rc,
 	uh->uh_op = op;
 	uh->uh_rc = rc;
 	uh->uh_seqno = seqno;
+}
+
+void
+cmd_send_arp_phys(char *rxbuf, char *txbuf, vxstate_t *state, int gratuitous)
+{
+	struct arphdr_ether *dae;
+	struct ether_vlan_header *evh, *sevh;
+	uint64_t dmac, broadcast = 0xFFFFFFFFFFFF;
+
+	sevh = (struct ether_vlan_header *)(rxbuf);
+	evh = (struct ether_vlan_header *)(txbuf);
+	/* XXX hardcoding no VLAN */
+	dae = (struct arphdr_ether *)(txbuf + ETHER_HDR_LEN);
+	if (gratuitous || rxbuf == NULL)
+		eh_fill((struct ether_header *)evh, state->vs_intf_mac, broadcast, ETHERTYPE_ARP);
+	else {
+		dmac = mactou64(sevh->evl_shost);
+		eh_fill((struct ether_header *)evh, state->vs_intf_mac, dmac, ETHERTYPE_ARP);
+	}
+	dae->ae_hdr.data = AE_REPLY;
+	dae->ae_spa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
+	u64tomac(state->vs_intf_mac, dae->ae_sha);
+	dae->ae_tpa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
+	u64tomac(state->vs_intf_mac, dae->ae_tha);
 }
 
 int
@@ -51,6 +76,16 @@ cmd_initiate(char *rxbuf __unused, char *txbuf, path_state_t *ps, void *arg)
 
 	op = (rte->ri_flags & RI_VALID) ? CMD_HEARTBEAT : CMD_ROUTE_QUERY;
 	uvxcmd_fill(txbuf, state->vs_ctrl_mac, state->vs_prov_mac, op, 0, 0);
+
+	if (state->vs_dflt_rte.ri_flags & RI_DO_GRAT) {
+		/* need to do periodically */
+		cmd_send_arp_phys(NULL, txbuf, state, 1);
+		*(ps->ps_tx_len) = 60;
+		state->vs_dflt_rte.ri_flags &= ~RI_DO_GRAT;
+	} else {
+		op = (rte->ri_flags & RI_VALID) ? CMD_HEARTBEAT : CMD_ROUTE_QUERY;
+		uvxcmd_fill(txbuf, state->vs_ctrl_mac, state->vs_prov_mac, op, 0, 0);
+	}
 
 	/* update all datapath threads with a copy of the latest state */
 	dp_count = state->vs_datapath_count;
@@ -162,46 +197,6 @@ cmd_dispatch_ipfw(struct ipfw_wire_hdr *ipfw, char *txdata, vxstate_t *state)
 	memcpy(txdata, ipfw, sizeof(*ipfw) + optlen);
 	return (sizeof(*ipfw) + optlen);
 }
-
-#if 0
-int
-cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state)
-{
-	struct ip *ip = (struct ip *)(uintptr_t)(rxbuf + ETHER_HDR_LEN);
-	struct udphdr *uh = (struct udphdr *)(uintptr_t)((caddr_t)ip + (ip->ip_hl << 2));
-	struct dhcp *bp = (struct dhcp *)(uintptr_t)(uh + 1);
-	struct ipfw_wire_hdr *ipfw = (struct ipfw_wire_hdr *)(uintptr_t)(uh + 1);
-	uint16_t dport;
-	/* validate ip header */
-
-	/* validate the UDP header */
-	dport = ntohs(uh->uh_dport);
-
-	/* we're only supporting a BOOTP response for the moment */
-	if (ps->ps_rx_len < sizeof(*bp) + BP_MSG_OVERHEAD)
-		return 0;
-
-	if (dport == IPPORT_BOOTPS && cmd_dispatch_bp(bp, state)) {
-		char *txbuf_;
-		path_state_t psgrat;
-
-		bzero(&psgrat, sizeof(path_state_t));
-		if ((txbuf_ = get_txbuf(&psgrat, state->vs_nm_egress)) == NULL)
-			return (0);
-		/*
-		 * we have our address -- now we want to send out a
-		 * gratuitous ARP for the switch
-		 */
-		data_send_arp_phys(rxbuf, txbuf_, &psgrat, state, 1);
-		txring_next(&psgrat, 60);
-		/* XXX proactively resolve the MAC address for the gateway */
-		/* ... */
-	} else if (dport == IPPORT_IPFWPS) {
-		return cmd_dispatch_ipfw(ipfw, txbuf, ps, state);
-	}
-	return (0);
-}
-#endif
 
 static uint32_t
 genmask(int prefixlen)
@@ -365,13 +360,13 @@ cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 			break;
 		case CMD_ROUTE_CONFIGURE: {
 			rte_t *rte = &state->vs_dflt_rte;
-			struct route_configure *rc = (struct route_configure *)rxdata;
+			struct route_configure *rco = (struct route_configure *)rxdata;
 
-			rte->ri_prefixlen = rc->rc_prefixlen;
-			rte->ri_mask.in4.s_addr = genmask(rc->rc_prefixlen);
-			rte->ri_laddr.in4.s_addr = rc->rc_lpa;
-			rte->ri_raddr.in4.s_addr = rc->rc_rpa;
-			rte->ri_flags = RI_VALID;
+			rte->ri_prefixlen = rco->rc_prefixlen;
+			rte->ri_mask.in4.s_addr = genmask(rco->rc_prefixlen);
+			rte->ri_laddr.in4.s_addr = rco->rc_lpa;
+			rte->ri_raddr.in4.s_addr = rco->rc_rpa;
+			rte->ri_flags = RI_VALID|RI_DO_GRAT;
 			DBG("route installed\n");
 		}
 			break;

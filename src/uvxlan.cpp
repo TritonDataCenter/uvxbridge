@@ -214,7 +214,7 @@ data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps,
  * - remote IP -> remote MAC when the remote IP is first learned
  */
 int
-data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unused,
+data_dispatch_arp_vx(char *rxbuf, char *txbuf, path_state_t *ps,
 				  vxstate_dp_t *dp_state)
 {
 	struct ether_vlan_header *evh;
@@ -238,6 +238,12 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf __unused, path_state_t *ps __unuse
 
 	/* a host local VM MAC address -- need to have vxlanid */
 	mac = mactou64(evh->evl_shost);
+	if (mac == state->vs_intf_mac) {
+		nm_pkt_copy(rxbuf, txbuf, ps->ps_rx_len);
+		*ps->ps_tx_len = ps->ps_rx_len;
+		return (1);
+	}
+
 	if (mac != state->vs_prov_mac) {
 		auto it_ii = intftbl.find(mac);
 		if (it_ii == intftbl.end()) {
