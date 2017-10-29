@@ -6,6 +6,7 @@
 #include <botan/credentials_manager.h>
 #include <botan/data_src.h>
 #include "datapath.h"
+#define UVX_KEYSIZE 32
 
 
 class dtls_channel;

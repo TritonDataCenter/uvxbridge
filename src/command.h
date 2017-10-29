@@ -2,7 +2,6 @@
 #define _UVXCOMMAND_H_
 
 #define	ETHERTYPE_UVXCONF		0xDECA	/* uxvxbridge config type  */
-
 #define UVXMAGIC				0xABADCAFE
 
 struct uvxcmd_header {
@@ -43,16 +42,19 @@ struct vm_intf_reply {
 	uint32_t vir_flags;
 };
 
-struct dtls_configure {
-	struct in_addr dc_pa;
-	/* TBD - key state etc */
+struct dtls_configure_client {
+	struct in_addr dcc_pa;
+	uint8_t dcc_psk[UVX_KEYSIZE];
+};
+
+struct dtls_configure_server {
+	uint8_t dcs_psk[UVX_KEYSIZE];
 };
 
 struct dtls_query {
-	struct in_addr dc_pa;
-	/* TBD - key state etc */
+	struct in_addr dq_pa;
+	uint8_t dq_psk[UVX_KEYSIZE];
 };
-
 
 struct route_configure {
 	uint32_t rc_lpa;
@@ -61,6 +63,7 @@ struct route_configure {
 	uint16_t rc_flags;
 };
 
+#define CMD_OP_NONE			0x0
 #define CMD_ARP_REQUEST		0x1
 #define CMD_ARP_REPLY		0x2
 
@@ -70,14 +73,15 @@ struct route_configure {
 #define CMD_VM_INTF_REQUEST	0x5
 #define CMD_VM_INTF_REPLY	0x6
 
-#define CMD_DTLS_CONFIGURE	0x7
-#define CMD_DTLS_QUERY		0x8
+#define CMD_DTLS_SERVCONF	0x7
+#define CMD_DTLS_CLICONF	0x8
+#define CMD_DTLS_QUERY		0x9
 
-#define CMD_ROUTE_CONFIGURE	0x9
-#define CMD_ROUTE_QUERY		0xA
+#define CMD_ROUTE_CONFIGURE	0xA
+#define CMD_ROUTE_QUERY		0xB
 
-#define CMD_IPFW			0xB
-#define CMD_HEARTBEAT		0xC
+#define CMD_IPFW			0xC
+#define CMD_HEARTBEAT		0xD
 
 void uvxcmd_fill(char *txbuf, uint64_t smac, uint64_t dmac, uint32_t op);
 

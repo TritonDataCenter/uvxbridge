@@ -1,3 +1,5 @@
+#include "dtls.h"
+
 extern "C" {
 #include <glue.h>
 
@@ -357,7 +359,10 @@ cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 			}
 		}
 			break;
-		case CMD_DTLS_CONFIGURE:
+		case CMD_DTLS_SERVCONF:
+			rc = ENOSYS;
+			break;
+		case CMD_DTLS_CLICONF:
 			rc = ENOSYS;
 			break;
 		case CMD_DTLS_QUERY:

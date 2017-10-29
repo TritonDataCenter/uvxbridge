@@ -50,7 +50,6 @@ dtls_udp_fill(char *txbuf, void *payload, int len)
 	memcpy(data, payload, len);
 }
 
-
 class dtls_callbacks : public Botan::TLS::Callbacks
 {
 public:
@@ -66,11 +65,12 @@ public:
 	tls_emit_data(const uint8_t buf[], size_t buf_len) override {
 		dtls_udp_fill(*dc_tx_cookie, (char *)(uintptr_t)buf, buf_len);
 	}
+
 	bool
 	tls_session_established(const Botan::TLS::Session& session __unused) override {
 		return false;
 	}
-	
+
 	void
 	tls_alert(Botan::TLS::Alert alert __unused) override {
 		/* close session or log */
@@ -86,10 +86,31 @@ private:
 };
 
 
+class uvxbridge_credentials_manager : public Botan::Credentials_Manager
+{
+public:
+	uvxbridge_credentials_manager(char key[UVX_KEYSIZE]) {
+		this->key = string(key, UVX_KEYSIZE);
+	}
+
+	std::string psk_identity_hint(const std::string&, const std::string&) override {
+		return "psk_hint";
+	}
+	std::string psk_identity(const std::string&, const std::string&, const std::string&) override {
+		return "psk_id";
+	}
+
+	Botan::SymmetricKey psk(const std::string&, const std::string&, const std::string&) override {
+		return Botan::SymmetricKey(key);
+	}
+private:
+	string key;
+};
+
 class dtls_channel {
 public:
 	dtls_channel(Botan::TLS::Session_Manager& session_manager,
-				 Botan::Credentials_Manager& creds,
+				 char key[UVX_KEYSIZE],
 				 const Botan::TLS::Policy& policy,
 				 Botan::RandomNumberGenerator& rng) {
 		char **bufp = (char **)malloc(2*sizeof(char *));
@@ -97,17 +118,35 @@ public:
 		dc_tx_cookie = bufp;
 		dc_rx_cookie = bufp+1;
 		dtls_callbacks callbacks(bufp);
+		uvxbridge_credentials_manager creds(key);
+
 		/* XXX --- if this is a client we need to initiate a connection */
 		this->dc_channel = new Botan::TLS::Server(callbacks, session_manager, creds, policy, rng, true);
-/*
-		return new Botan::TLS::Client(callbacks,
-									  session_mgr,
+	}
+	dtls_channel(Botan::TLS::Session_Manager& session_manager,
+				 char key[UVX_KEYSIZE],
+				 const Botan::TLS::Policy& policy,
+				 Botan::RandomNumberGenerator& rng,
+				 char *addr,
+				 uint16_t port) {
+		char **bufp = (char **)malloc(2*sizeof(char *));
+
+		dc_tx_cookie = bufp;
+		dc_rx_cookie = bufp+1;
+		dtls_callbacks callbacks(bufp);
+		uvxbridge_credentials_manager creds(key);
+		/* XXX --- if this is a client we need to initiate a connection */
+		this->dc_channel = new Botan::TLS::Client(callbacks,
+									  session_manager,
 									  creds,
 									  policy,
 									  rng,
-									  Botan::TLS::Server_Information("Joyent.net", 443),
+									  Botan::TLS::Server_Information(addr, port),
 									  Botan::TLS::Protocol_Version::latest_dtls_version());
-*/
+
+	}
+	~dtls_channel() {
+		delete dc_channel;
 	}
 	void transmit(char *buf, size_t buf_size, char *txbuf) {
 		*dc_tx_cookie = txbuf;
@@ -145,104 +184,4 @@ dtls_channel_receive(dtls_channel *channel, char *rxbuf, char *txbuf, path_state
 {
 	return channel->receive(rxbuf, txbuf, ps, dp_state);
 }
-
-class uvxbridge_credentials_manager : public Botan::Credentials_Manager
-{
-public:
-	uvxbridge_credentials_manager() {
-		load_certstores();
-	}
-	
-	uvxbridge_credentials_manager(Botan::RandomNumberGenerator& rng,
-							  const std::string& server_crt,
-							  const std::string& server_key) {
-		Certificate_Info cert;
-
-		cert.key.reset(Botan::PKCS8::load_key(server_key, rng));
-		
-		Botan::DataSource_Stream in(server_crt);
-		while(!in.end_of_data()) {
-			try {
-				cert.certs.push_back(Botan::X509_Certificate(in));
-			} catch(std::exception&) {
-
-			}
-		}
-
-		// TODO: attempt to validate chain ourselves
-		m_creds.push_back(cert);
-	}
-
-	void load_certstores() {
-		try {
-			// TODO: make path configurable
-			const std::vector<std::string> paths = {
-				"/etc/ssl/certs", "/usr/share/ca-certificates"
-			};
-
-			for(auto const& path : paths) {
-				std::shared_ptr<Botan::Certificate_Store> cs(new Botan::Certificate_Store_In_Memory(path));
-				m_certstores.push_back(cs);
-			}
-		} catch(std::exception&) { }
-	}
-
-	std::vector<Botan::Certificate_Store*>
-	trusted_certificate_authorities(const std::string& type,
-									const std::string& /*hostname*/) override
-		{
-			std::vector<Botan::Certificate_Store*> v;
-
-			// don't ask for client certs
-			if(type == "tls-server")
-			{
-				return v;
-			}
-
-			for(auto const& cs : m_certstores)
-			{
-				v.push_back(cs.get());
-			}
-
-			return v;
-		}
-
-	std::vector<Botan::X509_Certificate> cert_chain(
-		const std::vector<std::string>& algos,
-		const std::string& type,
-		const std::string& hostname) override {
-			BOTAN_UNUSED(type);
-
-			for(auto const& i : m_creds) {
-				if(std::find(algos.begin(), algos.end(), i.key->algo_name()) == algos.end())
-					continue;
-
-				if(hostname != "" && !i.certs[0].matches_dns_name(hostname))
-					continue;
-
-				return i.certs;
-			}
-
-			return std::vector<Botan::X509_Certificate>();
-		}
-
-	Botan::Private_Key* private_key_for(const Botan::X509_Certificate& cert,
-										const std::string& /*type*/,
-										const std::string& /*context*/) override {
-		for(auto const& i : m_creds) {
-			if(cert == i.certs[0])
-				return i.key.get();
-		}
-		return nullptr;
-	}
-
-private:
-	struct Certificate_Info	{
-		std::vector<Botan::X509_Certificate> certs;
-		std::shared_ptr<Botan::Private_Key> key;
-	};
-
-	std::vector<Certificate_Info> m_creds;
-	std::vector<std::shared_ptr<Botan::Certificate_Store>> m_certstores;
-};
 
