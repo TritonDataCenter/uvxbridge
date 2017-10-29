@@ -39,13 +39,13 @@ v0.4 +
 v0.6
 2017.11.17 - Friday
 v0.5 +
- - DTLS offload
- - copy reduction (direct SR-IOV interface)
+ - rate limiting in VALE and uvxbridge
  
  v0.7
 2017.11.24 - Friday
 v0.6 +
- - rate limiting in VALE and uvxbridge
+ - DTLS offload
+ - copy reduction (direct SR-IOV interface)
 
 Unscheduled - but may be done to meet performance targets:
  - ptnetmap integration upstreamable
