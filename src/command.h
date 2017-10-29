@@ -61,12 +61,6 @@ struct route_configure {
 	uint16_t rc_flags;
 };
 
-struct ipfw_cmd {
-	uint32_t ic_len;
-	uint32_t ic_pad;
-};
-
-	
 #define CMD_ARP_REQUEST		0x1
 #define CMD_ARP_REPLY		0x2
 
