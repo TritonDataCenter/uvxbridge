@@ -5,8 +5,8 @@ uvxbridge -i \<ingress\> -e \<egress\> -c \<config\> -m \<config mac address\> -
 
 v0.1:
 2017.10.13 - Friday --- DONE
-- v4 only
-- VLAN support incomplete
+- underlay is v4 only
+- VLAN unsupported for underlay
 - regular MTU only
 - only a single interface address and default route is accepted
 - 2 copies on both ingress and egress
@@ -27,7 +27,6 @@ v0.2 +
 v0.4
 2017.11.03 - Friday
 v0.3 +
- - ipv6 support
  - additional routes / interface addresses
 
 v0.5
