@@ -39,7 +39,6 @@ int ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *ifp,
 					 int dir, struct inpcb *inp, struct ip_fw_chain *);
 
 }
-#include "dtls.h"
 #include "uvxbridge.h"
 #include "uvxlan.h"
 #include "proto.h"
@@ -347,6 +346,8 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	rte_t *rte = &state->vs_dflt_rte;
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
+	struct udphdr *uh;
+	uint8_t *data;
 	struct egress_cache ec;
 	struct ip_fw_chain *chain;
 	uint64_t srcmac, dstmac, targetha;
@@ -371,7 +372,14 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 		/* XXX VLAN only */
 		memcpy(txbuf, &dp_state->vsd_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
 		nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
-		*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
+		if (ec.ec_flags & EC_TUN) {
+			uh = (struct udphdr *)(txbuf + sizeof(struct ether_header) + sizeof(ip));
+			uh->uh_dport = htons(443);
+			data = (uint8_t *)(uh + 1);
+			dp_state->vsd_ecache.ec_cipher->encrypt_n((const uint8_t *)data, data, state->vs_mtu_blocks);
+			*(ps->ps_tx_len) = state->vs_mtu;
+		} else 
+			*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
 		return (1);
 	}
 	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
@@ -473,13 +481,17 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	memcpy(txbuf, &ec.ec_hdr, sizeof(struct vxlan_header));
 	nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
 
-
-	if (!vfe->vfe_dtls) {
+	if (!vfe->vfe_encrypt) {
 		*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
 		return (1);
 	}
 	/* call encrypted channel */
-	dtls_channel_transmit(vfe->vfe_channel.get(), txbuf, state->vs_mtu /* PAD */, txbuf);
+	ec.ec_cipher = vfe->vfe_cipher;
+	ec.ec_flags |= EC_TUN;
+	uh = (struct udphdr *)(txbuf + sizeof(struct ether_header) + sizeof(ip));
+	uh->uh_dport = htons(443);
+	data = (uint8_t *)(uh + 1);
+	ec.ec_cipher->encrypt_n((const uint8_t *)data, data, state->vs_mtu_blocks);
 	*(ps->ps_tx_len) = state->vs_mtu;
 	return (1);
 }
@@ -488,17 +500,11 @@ int
 dtls_decrypt_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 				vxstate_dp_t *dp_state)
 {
-	vxstate_t *state = dp_state->vsd_state;
-	struct ether_header *eh = (struct ether_header *)rxbuf;
-	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
-	vre_t *vre;
+	uint8_t *data = (uint8_t *)(rxbuf + sizeof(struct ether_header) + sizeof(struct ip) +
+								sizeof(struct udphdr));
 
-	auto it = state->vs_rtable.find(ip->ip_src.s_addr);
-	if (it == state->vs_rtable.end())
-		return (0);
-	vre = &it->second;
-	/* ip->ip_src -> channel */
-	dtls_channel_receive(vre->vre_channel.get(), rxbuf, txbuf, ps, dp_state);
+	dp_state->vsd_cipher->decrypt(data);
+	vxlan_decap_v4(rxbuf, txbuf, ps, dp_state);
 }
 
 int

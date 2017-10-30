@@ -3,6 +3,7 @@
 
 #define	ETHERTYPE_UVXCONF		0xDECA	/* uxvxbridge config type  */
 #define UVXMAGIC				0xABADCAFE
+#define UVX_KEYSIZE 32
 
 struct uvxcmd_header {
 	uint16_t uh_seqno;
@@ -42,18 +43,18 @@ struct vm_intf_reply {
 	uint32_t vir_flags;
 };
 
-struct dtls_configure_client {
-	struct in_addr dcc_pa;
-	char dcc_psk[UVX_KEYSIZE];
+struct tun_configure_client {
+	struct in_addr tcc_pa;
+	uint8_t tcc_psk[UVX_KEYSIZE];
 };
 
-struct dtls_configure_server {
-	char dcs_psk[UVX_KEYSIZE];
+struct tun_configure_server {
+	uint8_t tcs_psk[UVX_KEYSIZE];
 };
 
-struct dtls_query {
-	struct in_addr dq_pa;
-	uint8_t dq_psk[UVX_KEYSIZE];
+struct tun_query {
+	struct in_addr tq_pa;
+	uint8_t tq_psk[UVX_KEYSIZE];
 };
 
 struct route_configure {
@@ -73,9 +74,9 @@ struct route_configure {
 #define CMD_VM_INTF_REQUEST	0x5
 #define CMD_VM_INTF_REPLY	0x6
 
-#define CMD_DTLS_SERVCONF	0x7
-#define CMD_DTLS_CLICONF	0x8
-#define CMD_DTLS_QUERY		0x9
+#define CMD_TUN_SERVCONF	0x7
+#define CMD_TUN_CLICONF	0x8
+#define CMD_TUN_QUERY		0x9
 
 #define CMD_ROUTE_CONFIGURE	0xA
 #define CMD_ROUTE_QUERY		0xB

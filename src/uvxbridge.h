@@ -32,16 +32,14 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <set>
 #include <memory>
 #include "proto.h"
 
 #include <ipfw_exports.h>
 #include "datapath.h"
 
-#include <botan/tls_session_manager.h>
-#include <botan/tls_policy.h>
-#include <botan/auto_rng.h>
-
+#include <botan/block_cipher.h>
 
 using std::string;
 using std::pair;
@@ -109,15 +107,21 @@ typedef union vxlan_in_addr {
 
 typedef struct vxlan_ftable_entry {
 	union vxlan_in_addr vfe_raddr;
-	std::shared_ptr<dtls_channel> vfe_channel;
+	std::shared_ptr<Botan::BlockCipher> vfe_cipher;
 	uint64_t vfe_v6:1;
-	uint64_t vfe_dtls:1;
+	uint64_t vfe_encrypt:1;
 	uint64_t vfe_gen:14;
 	uint64_t vfe_expire:48;
 } vfe_t;
 
+struct maccomp {
+	bool operator() (const pair<uint32_t, uint64_t>& lhs, const pair<uint32_t, uint64_t>& rhs) const {
+		return lhs.second < rhs.second;
+	}
+};
 typedef struct vxlan_rftable_entry {
-	std::shared_ptr<dtls_channel> vre_channel;
+	std::set<pair<uint32_t, uint64_t>, maccomp> vre_macs;
+	std::shared_ptr<Botan::BlockCipher> vre_cipher;
 } vre_t;
 
 
@@ -153,11 +157,13 @@ struct uvxstat {
 
 #define EC_VLAN 0x01
 #define EC_IPV6 0x02
+#define EC_TUN  0x04
 struct egress_cache {
 	uint64_t ec_smac;
 	uint64_t ec_dmac;
 	uint64_t ec_flags;
 	struct ip_fw_chain *ec_chain;
+	std::shared_ptr<Botan::BlockCipher> ec_cipher;
 	union {
 		struct vxlan_header vh;
 		struct vxlan_vlan_header vvh;
@@ -180,7 +186,9 @@ typedef struct vxlan_state {
 	/* forwarding table */
 	ftablemap_t vs_ftables;
 
-	/* reverse lookup table */
+	/* reverse lookup table
+	 * the cipher state really needs to be per datapath
+	 */
 	rtable_t vs_rtable;
 
 	/* phys nd table */
@@ -188,6 +196,7 @@ typedef struct vxlan_state {
 
 	/* encap port allocation */
 	uint16_t vs_mtu;
+	uint16_t vs_mtu_blocks;
 	uint16_t vs_min_port;
 	uint16_t vs_max_port;
 	uint16_t vs_pad;
@@ -251,10 +260,7 @@ typedef struct vxlan_state_dp {
 	vxstate_t *vsd_state;
 
 	/* server channel */
-	dtls_channel *vsd_channel;
-	Botan::AutoSeeded_RNG vsd_rng;
-	Botan::TLS::Session_Manager_In_Memory vsd_session_mgr;
-	Botan::TLS::Policy vsd_policy;
+	std::shared_ptr<Botan::BlockCipher> vsd_cipher;
 
 	/* egress cache if next == prev */
 	struct egress_cache vsd_ecache;
@@ -271,11 +277,10 @@ typedef struct vxlan_state_dp {
 
 	vxlan_state_dp(uint32_t id, vxstate_t *state) :
 		vsd_state(state),
-		vsd_session_mgr(this->vsd_rng),
-		vsd_policy(Botan::TLS::Strict_Policy()),
 		vsd_datapath_id(id) {
 		bzero(&this->vsd_stats, sizeof(struct uvxstat));
 		this->vsd_state = state;
+		this->vsd_cipher = Botan::BlockCipher::create("AES-128");
 		this->vsd_ingress_port.np_ifp = ifnet_alloc();
 		this->vsd_egress_port.np_ifp = ifnet_alloc();
 		this->vsd_ingress_port.np_state = this->vsd_egress_port.np_state = this;

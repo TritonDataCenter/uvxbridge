@@ -1,4 +1,4 @@
-#include "dtls.h"
+#include <botan/block_cipher.h>
 
 extern "C" {
 #include <glue.h>
@@ -274,20 +274,35 @@ cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 		case CMD_FTE_REPLY: {
 			ftablemap_t &ftablemap = state->vs_ftables;
 			struct fte_reply *fre = (struct fte_reply *)rxdata;
+			pair<uint32_t, uint64_t> vreent;
 			auto ftable_it = ftablemap.find(fre->fr_vxlanid);
 
 			mac = mactou64(fre->fr_ha);
+			vreent = pair<uint32_t, uint64_t>(fre->fr_vxlanid, mac);
 			if (ftable_it == ftablemap.end()) {
 				rc = ENOENT;
 				break;
 			}
-			if (fre->fr_pa == 0)
+			if (fre->fr_pa == 0) {
+				auto vfe_it = ftable_it->second.find(mac);
+				if (vfe_it == ftable_it->second.end())
+					break;
+				uint32_t addr = vfe_it->second.vfe_raddr.in4.s_addr;
 				ftable_it->second.erase(mac);
-			else {
+				auto rit = state->vs_rtable.find(addr);
+				rit->second.vre_macs.erase(vreent);
+			} else {
 				vfe_t vfe;
 				vfe.vfe_raddr.in4.s_addr = fre->fr_pa;
 				ftable_it->second.insert(fwdent(mac, vfe));
 				/* XXX proactively resolve the MAC address for tpa */
+				auto rit = state->vs_rtable.find(fre->fr_pa);
+				if (rit == state->vs_rtable.end()) {
+					vre_t vre;
+					vre.vre_macs.insert(vreent);
+					state->vs_rtable.insert(revent(fre->fr_vxlanid, vre));
+				} else
+					rit->second.vre_macs.insert(vreent);
 			}
 		}
 			break;
@@ -354,34 +369,68 @@ cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 			}
 		}
 			break;
-		case CMD_DTLS_SERVCONF: {
-			struct dtls_configure_server *dcs = (struct dtls_configure_server *)rxdata;
+		case CMD_TUN_SERVCONF: {
+			struct tun_configure_server *tcs = (struct tun_configure_server *)rxdata;
 			int dp_count = state->vs_datapath_count;
-			vxstate_dp_t *dp_state;
-			int i, j;
+			std::shared_ptr<Botan::BlockCipher> old_ciphers[NM_PORT_MAX], ciphers[NM_PORT_MAX];
+			int i;
 
-			for (i = 0; i < dp_count; i++) {
-				dp_state = state->vs_dp_states[i];
-				dp_state->vsd_channel = dtls_channel_alloc(
-					dp_state->vsd_session_mgr,
-					dcs->dcs_psk,
-					dp_state->vsd_policy,
-					dp_state->vsd_rng);
-
-				if (dp_state->vsd_channel == NULL)
-					break;
-			}
+			for (i = 0; i < dp_count; i++)
+				ciphers[i] = Botan::BlockCipher::create("AES-128");
 			if (i != dp_count) {
-				for (j = 0; j < i; j++)
-					state->vs_dp_states[j]->vsd_channel = NULL;
 				rc = ENOMEM;
+				break;
 			}
+			for (i = 0; i < dp_count; i++) {
+				ciphers[i]->set_key(tcs->tcs_psk, UVX_KEYSIZE);
+				old_ciphers[i] = state->vs_dp_states[i]->vsd_cipher;
+				state->vs_dp_states[i]->vsd_cipher = ciphers[i];
+			}
+			/* XXX more LOLEBR --- fix */
+			usleep(50000);
 		}
 			break;
-		case CMD_DTLS_CLICONF:
-			rc = ENOSYS;
+		case CMD_TUN_CLICONF: {
+			ftablemap_t &ftablemap = state->vs_ftables;
+			struct tun_configure_client *tcc = (struct tun_configure_client *)rxdata;
+			std::shared_ptr<Botan::BlockCipher> cipher(Botan::BlockCipher::create("AES-128"));
+			std::shared_ptr<Botan::BlockCipher> oldcipher;
+			vre_t newvre;
+
+			cipher.get()->set_key(tcc->tcc_psk, UVX_KEYSIZE);
+			auto rit = state->vs_rtable.find(tcc->tcc_pa.s_addr);
+			if (rit == state->vs_rtable.end()) {
+				newvre.vre_cipher = cipher;
+				state->vs_rtable.insert(revent(tcc->tcc_pa.s_addr, newvre));
+				break;
+			}
+			oldcipher = rit->second.vre_cipher;
+			rit->second.vre_cipher = cipher;
+			for (auto it = rit->second.vre_macs.begin(); it != rit->second.vre_macs.end(); it++) {
+				uint32_t vxlanid = it->first;
+				mac = it->second;
+				auto ftable_it = ftablemap.find(vxlanid);
+				if (ftable_it == ftablemap.end()) {
+					/* XXX this shouldn't happen -- validate */
+					continue;
+				}
+				auto vfe_it = ftable_it->second.find(mac);
+				if (vfe_it == ftable_it->second.end()) {
+					/* XXX this shouldn't happen -- validate */
+					continue;
+				}
+				if (vfe_it->second.vfe_raddr.in4.s_addr != tcc->tcc_pa.s_addr) {
+					/* XXX this shouldn't happen -- validate */
+					continue;
+				}
+				vfe_it->second.vfe_cipher = cipher;
+				vfe_it->second.vfe_encrypt = 1;
+			}
+			/* XXX LOLEBR - wait some time before letting remaining reference go out scope */
+			usleep(50000);
+		}
 			break;
-		case CMD_DTLS_QUERY:
+		case CMD_TUN_QUERY:
 			rc = ENOSYS;
 			break;
 		case CMD_ROUTE_CONFIGURE: {
