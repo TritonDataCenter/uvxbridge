@@ -132,47 +132,12 @@ dhcp_fill(struct dhcp *bp, vxstate_t *state)
 	bp->bp_vendid = htonl(BP_FIXED);
 }
 
-int
-cmd_send_dhcp(char *rxbuf __unused, char *txbuf, path_state_t *ps, vxstate_t *state)
-{
-	struct ether_header *eh = (struct ether_header *)txbuf;
-	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
-	struct udphdr *uh = (struct udphdr *)(ip + 1);
-	struct dhcp *bp = (struct dhcp *)(uintptr_t)(uh + 1);
-
-	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
-	/* source IP unknown, dest broadcast IP */
-	ip_fill(ip, 0, 0xffffffff, sizeof(*bp) + sizeof(*uh) + sizeof(*ip), IPPROTO_UDP);
-	udp_fill(uh, IPPORT_BOOTPC, IPPORT_BOOTPS, sizeof(*bp));
-	dhcp_fill(bp, state);
-	*(ps->ps_tx_len) = BP_MSG_OVERHEAD + sizeof(*bp);
-	return (1);
-}
-
 static void
 uvxstat_fill(struct uvxstat *stat, vxstate_t *state)
 {
 	/* XXX -- only supports one datapath */
 	if (state->vs_datapath_count)
 		memcpy(stat, &state->vs_dp_states[0]->vsd_stats, sizeof(*stat));
-}
-
-int
-cmd_send_heartbeat(char *rxbuf __unused, char *txbuf, path_state_t *ps,
-				   vxstate_t *state)
-{
-	struct ether_header *eh = (struct ether_header *)txbuf;
-	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
-	struct udphdr *uh = (struct udphdr *)(ip + 1);
-	struct uvxstat *stat = (struct uvxstat *)(uintptr_t)(uh + 1);
-
-	eh_fill(eh, state->vs_ctrl_mac, state->vs_prov_mac, ETHERTYPE_IP);
-	/* source IP unknown, dest broadcast IP */
-	ip_fill(ip, 0, 0xffffffff, sizeof(*stat) + sizeof(*uh) + sizeof(*ip), IPPROTO_UDP);
-	udp_fill(uh, IPPORT_STATPC, IPPORT_STATPS, sizeof(*stat));
-	uvxstat_fill(stat, state);
-	*(ps->ps_tx_len) = BP_MSG_OVERHEAD + sizeof(*stat);
-	return (1);
 }
 
 /*
@@ -346,7 +311,9 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	rte_t *rte = &state->vs_dflt_rte;
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
+	struct vxlanhdr *vh;
 	struct udphdr *uh;
+	struct ip *ip;
 	uint8_t *data;
 	struct egress_cache ec;
 	struct ip_fw_chain *chain;
@@ -373,10 +340,17 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 		memcpy(txbuf, &dp_state->vsd_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
 		nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
 		if (ec.ec_flags & EC_TUN) {
-			uh = (struct udphdr *)(txbuf + sizeof(struct ether_header) + sizeof(ip));
-			uh->uh_dport = htons(443);
+			ip = (struct ip *)(txbuf + sizeof(struct ether_header));
+			uh = (struct udphdr *)(ip + 1);
+			vh = (struct vxlanhdr *)data;
 			data = (uint8_t *)(uh + 1);
+			vh->reserved2 = ip->ip_len;
+			ip->ip_len = htons(state->vs_mtu);
+			uh->uh_ulen = htons(state->vs_mtu - sizeof(*ip));
+			uh->uh_dport = htons(443);
 			dp_state->vsd_ecache.ec_cipher->encrypt_n((const uint8_t *)data, data, state->vs_mtu_blocks);
+			dp_state->vsd_ecache.ec_cipher->clear();
+
 			*(ps->ps_tx_len) = state->vs_mtu;
 		} else 
 			*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
@@ -420,7 +394,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	sport = XXH32(rxbuf, ETHER_HDR_LEN, state->vs_seed) % range;
 	sport += state->vs_min_port;
 	pktsize = ps->ps_rx_len + sizeof(struct vxlan_header) -
-		sizeof(struct ether_header) - sizeof(struct udphdr) - sizeof(struct ip);
+		sizeof(struct ether_header) - sizeof(struct ip);
 	udp_fill((struct udphdr *)(uintptr_t)&ec.ec_hdr.vh.vh_udphdr, sport, VXLAN_DPORT, pktsize);
 
 	/* next map evh->evl_dhost -> remote ip addr in the
@@ -488,10 +462,16 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	/* call encrypted channel */
 	ec.ec_cipher = vfe->vfe_cipher;
 	ec.ec_flags |= EC_TUN;
-	uh = (struct udphdr *)(txbuf + sizeof(struct ether_header) + sizeof(ip));
-	uh->uh_dport = htons(443);
+	ip = (struct ip *)(txbuf + sizeof(struct ether_header));
+	uh = (struct udphdr *)(ip + 1);
 	data = (uint8_t *)(uh + 1);
+	vh = (struct vxlanhdr *)data;
+	vh->reserved2 = ip->ip_len;
+	ip->ip_len = htons(state->vs_mtu);
+	uh->uh_ulen = htons(state->vs_mtu - sizeof(*ip));
+	uh->uh_dport = htons(443);
 	ec.ec_cipher->encrypt_n((const uint8_t *)data, data, state->vs_mtu_blocks);
+	ec.ec_cipher->clear();
 	*(ps->ps_tx_len) = state->vs_mtu;
 	return (1);
 }
@@ -500,10 +480,14 @@ int
 dtls_decrypt_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 				vxstate_dp_t *dp_state)
 {
-	uint8_t *data = (uint8_t *)(rxbuf + sizeof(struct ether_header) + sizeof(struct ip) +
-								sizeof(struct udphdr));
+	struct ip *ip = (struct ip *)(rxbuf + sizeof(struct ether_header));
+	struct udphdr *uh = (struct udphdr *)(ip + 1);
+	uint8_t *data = (uint8_t *)(uh + 1);
+	struct vxlanhdr *vh = (struct vxlanhdr *)data;
 
 	dp_state->vsd_cipher->decrypt(data);
+	ip->ip_len = vh->reserved2;
+	uh->uh_ulen = htons(ntohs(ip->ip_len) - sizeof(*ip));
 	vxlan_decap_v4(rxbuf, txbuf, ps, dp_state);
 }
 
