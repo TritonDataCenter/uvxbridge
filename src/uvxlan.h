@@ -62,17 +62,6 @@ struct	arphdr {
 #define ARPOP_INVREQUEST 8 	/* request to identify peer */
 #define ARPOP_INVREPLY	9	/* response identifying peer */
 
-/* service private interface */
-#define ARPOP_REQUEST_ALL		10	/* request for all ARP entries */
-#define ARPOP_REVREQUEST_ALL		11	/* request for all forwarding table entries */
-
-#define ARPOP_VM_VXLANID_REQUEST	12	/* get VM mac -> VXLAN mapping */
-#define ARPOP_VM_VXLANID_REQUEST_ALL	13	/* get all VM mac -> VXLAN mappings */
-#define ARPOP_VM_VXLANID_REPLY		14	/* set VM mac -> VXLAN mapping */
-#define ARPOP_VM_VLANID_REQUEST	15	/* get VM mac -> VLAN mapping */
-#define ARPOP_VM_VLANID_REQUEST_ALL	16	/* get all VM mac -> VLAN mappings */
-#define ARPOP_VM_VLANID_REPLY		17	/* set VM mac -> VLAN mapping */
-
 /* NB: delete an entry by issuing a gratuitous reply with 255.255.255.255 */
 
 /*
@@ -117,20 +106,6 @@ struct arphdr_ether {
 #define ae_tvxlanid u.s.usae_tvxlanid
 
 
-
-int cmd_dispatch_arp(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
-int cmd_dispatch_ip(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state);
-
-int cmd_send_dhcp(char *rxbuf __unused, char *txbuf, path_state_t *ps,
-				   vxstate_t *state);
-int cmd_send_heartbeat(char *rxbuf __unused, char *txbuf, path_state_t *ps,
-					   vxstate_t *state);
-
-
-int data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state);
-int data_dispatch_arp_vx(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state);
-int vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state);
-int vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state);
 
 #ifdef __cplusplus
 extern "C" {

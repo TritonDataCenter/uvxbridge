@@ -52,6 +52,9 @@ extern int debug;
 
 #define AE_REQUEST             0x0100040600080100UL
 #define AE_REPLY               0x0200040600080100UL
+static int vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
+						  vxstate_dp_t *dp_state);
+
 
 /*
  * Send a query to the provisioning agent
@@ -139,7 +142,7 @@ uvxstat_fill(struct uvxstat *stat, vxstate_t *state)
 /*
  * Respond to queries for our encapsulating IP
  */
-int
+static int
 data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps,
 				  vxstate_dp_t *dp_state)
 {
@@ -173,7 +176,7 @@ data_dispatch_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps,
  * - destination MAC -> remote IP when they ARP for the vxlan MAC
  * - remote IP -> remote MAC when the remote IP is first learned
  */
-int
+static int
 data_dispatch_arp_vx(char *rxbuf, char *txbuf, path_state_t *ps,
 				  vxstate_dp_t *dp_state)
 {
@@ -295,7 +298,7 @@ ipfw_check(char *buf, uint16_t len, struct netmap_port *src, struct netmap_port 
  * If valid, encapsulate rxbuf in to txbuf
  *
  */
-int
+static int
 vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 			   vxstate_dp_t *dp_state)
 {
@@ -472,22 +475,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	return (1);
 }
 
-int
-tun_decrypt_v4(char *rxbuf, char *txbuf, path_state_t *ps,
-				vxstate_dp_t *dp_state)
-{
-	struct ip *ip = (struct ip *)(rxbuf + sizeof(struct ether_header));
-	struct udphdr *uh = (struct udphdr *)(ip + 1);
-	uint8_t *data = (uint8_t *)(uh + 1);
-	struct vxlanhdr *vh = (struct vxlanhdr *)data;
-
-	dp_state->vsd_cipher->decrypt(data);
-	ip->ip_len = vh->reserved2;
-	uh->uh_ulen = htons(ntohs(ip->ip_len) - sizeof(*ip));
-	return vxlan_decap_v4(rxbuf, txbuf, ps, dp_state);
-}
-
-int
+static int
 vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 			   vxstate_dp_t *dp_state)
 {
@@ -524,6 +512,21 @@ vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	nm_pkt_copy(rxbuf + sizeof(*vh), txbuf, pktlen);
 	*(ps->ps_tx_len) = pktlen;
 	return (1);
+}
+
+static int
+tun_decrypt_v4(char *rxbuf, char *txbuf, path_state_t *ps,
+				vxstate_dp_t *dp_state)
+{
+	struct ip *ip = (struct ip *)(rxbuf + sizeof(struct ether_header));
+	struct udphdr *uh = (struct udphdr *)(ip + 1);
+	uint8_t *data = (uint8_t *)(uh + 1);
+	struct vxlanhdr *vh = (struct vxlanhdr *)data;
+
+	dp_state->vsd_cipher->decrypt(data);
+	ip->ip_len = vh->reserved2;
+	uh->uh_ulen = htons(ntohs(ip->ip_len) - sizeof(*ip));
+	return vxlan_decap_v4(rxbuf, txbuf, ps, dp_state);
 }
 
 static int
