@@ -22,7 +22,7 @@ v0.1 +
 v0.3
 2017.10.27 - Friday
 v0.2 +
- - DTLS tunnel support
+ - encrypted tunnel support
 
 v0.4
 2017.11.03 - Friday
@@ -44,7 +44,7 @@ v0.5 +
  v0.7
 2017.11.24 - Friday
 v0.6 +
- - DTLS offload
+ - crypto offload
  - copy reduction (direct SR-IOV interface)
 
 Unscheduled - but may be done to meet performance targets:
