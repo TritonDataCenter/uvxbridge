@@ -14,13 +14,13 @@ v0.1:
 - ptnetmap integrated
 
 v0.2:
-2017.10.20 - Friday
+2017.10.20 - Friday DONE
 v0.1 +
  - optimized datapath to avoid lookups
  - firewall support with per VM interface state table
 
 v0.3
-2017.10.27 - Friday
+2017.10.27 - Friday DONE
 v0.2 +
  - encrypted tunnel support
 
