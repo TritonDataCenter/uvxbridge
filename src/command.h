@@ -49,6 +49,17 @@ struct arp_reply {
 	uint8_t ar_ha[ETHER_ADDR_LEN];
 };
 
+struct vx_arp_request {
+	uint32_t var_pa;
+	uint32_t var_vxlanid;
+};
+
+struct vx_arp_reply {
+	uint32_t var_pa;
+	uint32_t var_vxlanid;
+	uint8_t var_ha[ETHER_ADDR_LEN];
+};
+
 struct fte_request {
 	uint32_t fr_vxlanid;
 	uint8_t fr_ha[ETHER_ADDR_LEN];
@@ -112,7 +123,10 @@ struct route_configure {
 #define CMD_IPFW		0xC		/* enclosed payload is IPFW configuration information */
 #define CMD_HEARTBEAT		0xD		/* heartbeat to provisioning agent */
 
-void uvxcmd_fill(char *txbuf, uint64_t smac, uint64_t dmac, uint32_t op);
+#define CMD_VX_ARP_REQUEST	0xE		/* request hardware address for IP */
+#define CMD_VX_ARP_REPLY		0xF		/* provide hardware address for IP */
+
+void uvxcmd_fill(char *txbuf, uint64_t smac, uint64_t dmac, uint16_t op, uint16_t rc, uint16_t seqno);
 
 
 

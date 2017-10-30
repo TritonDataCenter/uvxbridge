@@ -42,51 +42,65 @@ int ipfw_check_frame(void *arg, struct mbuf **m0, struct ifnet *ifp,
 #include "uvxbridge.h"
 #include "uvxlan.h"
 #include "proto.h"
+#include "command.h"
 #include <nmutil.h>
 #include "xxhash.h"
 #include <glue.h>
 
-
-#define AE_REQUEST		0x0100040600080100UL
-#define AE_REPLY		0x0200040600080100UL
-#define AE_REVREQUEST		0x0300040600080100UL
-#define AE_REVREPLY		0x0400040600080100UL
-
-#define AE_REQUEST_ALL		0x0A00040600080100UL
-#define AE_REVREQUEST_ALL	0x0B00040600080100UL
-#define AE_VM_VXLANID_REQUEST	0x0C00040600080100UL
-#define AE_VM_VXLANID_REQUEST_ALL	0x0D00040600080100UL
-#define AE_VM_VXLANID_REPLY	0x0E00040600080100UL
-#define AE_VM_VLANID_REQUEST	0x0F00040600080100UL
-#define AE_VM_VLANID_REQUEST_ALL	0x1000040600080100UL
-#define AE_VM_VLANID_REPLY	0x1100040600080100UL
-
 #define A(val) printf("got %s\n", #val)
 extern int debug;
+
+#define AE_REQUEST             0x0100040600080100UL
+#define AE_REPLY               0x0200040600080100UL
 
 /*
  * Send a query to the provisioning agent
  */
 void
-data_send_arp(uint64_t targetha, uint32_t targetip, uint64_t op, vxstate_t *state)
+data_send_cmd(uint64_t targetha, uint32_t targetip, uint16_t op, vxstate_t *state)
 {
-	struct arphdr_ether ae;
-	char *txbuf;
+	char *txbuf, *data;
 	path_state_t ps;
+	int len;
 
-	/* get txbuf */
 	if ((txbuf = get_txbuf(&ps, state->vs_nm_ingress)) == NULL)
 		return;
-	ae.ae_hdr.data = op;
-	u64tomac(state->vs_ctrl_mac, ae.ae_sha);
-	/* XXX - assume v4 */
-	ae.ae_spa = state->vs_dflt_rte.ri_laddr.in4.s_addr;
-	u64tomac(targetha, ae.ae_tha);
-	ae.ae_tpa = targetip;
-	eh_fill((struct ether_header *)txbuf, state->vs_ctrl_mac, state->vs_prov_mac,
-			ETHERTYPE_ARP);
-	memcpy(txbuf + ETHER_HDR_LEN, &ae, sizeof(struct arphdr_ether));
-	txring_next(&ps, 60);
+
+	uvxcmd_fill(txbuf, state->vs_ctrl_mac, state->vs_prov_mac, op, 0, 0);
+	len = sizeof(struct ether_header) + sizeof(struct uvxcmd_header);
+	data = txbuf + len;
+	switch (op) {
+		case CMD_VM_INTF_REQUEST: {
+			struct vm_intf_request *vir = (struct vm_intf_request *)data;
+			u64tomac(targetha, vir->vir_ha);
+			len += sizeof(*vir);
+		}
+			break;
+		case CMD_FTE_REQUEST: {
+			struct fte_request *fr = (struct fte_request *)data;
+			fr->fr_vxlanid = targetip;
+			u64tomac(targetha, fr->fr_ha);
+			len += sizeof(*fr);
+		}
+			break;
+		case CMD_ARP_REQUEST: {
+			struct arp_request *ar = (struct arp_request *)data;
+			ar->ar_pa = targetip;
+			len += sizeof(*ar);
+		}
+			break;
+		case CMD_VX_ARP_REQUEST: {
+			struct vx_arp_request *var = (struct vx_arp_request *)data;
+			var->var_pa = targetip;
+			var->var_vxlanid = targetha;
+			len += sizeof(*var);
+		}
+			break;
+		default:
+			/* error */
+			return;
+	}
+	txring_next(&ps, len);
 }
 
 void
@@ -194,7 +208,7 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf, path_state_t *ps,
 		auto it_ii = intftbl.find(mac);
 		if (it_ii == intftbl.end()) {
 			/* request vxlanid */
-			data_send_arp(mac, 0, AE_VM_VXLANID_REQUEST, state);
+			data_send_cmd(mac, 0, CMD_VM_INTF_REQUEST, state);
 			return (0);
 		}
 	}
@@ -208,18 +222,18 @@ data_dispatch_arp_vx(char *rxbuf, char *txbuf, path_state_t *ps,
 		auto it_ii = intftbl.find(mac);
 		if (it_ii == intftbl.end()) {
 			/* request vxlanid */
-			data_send_arp(mac, 0, AE_VM_VXLANID_REQUEST, state);
+			data_send_cmd(mac, 0, CMD_VM_INTF_REQUEST, state);
 			return (0);
 		}
 		vxlanid = it_ii->second->ii_ent.fields.vxlanid;
 		auto it_ftable = ftablemap->find(vxlanid);
 		if (it_ftable == ftablemap->end()) {
 			/* send request for VXLANID */
-			data_send_arp(mac, 0, AE_VM_VXLANID_REQUEST, state);
+			data_send_cmd(mac, 0, CMD_VM_INTF_REQUEST, state);
 			return (0);
 		}
 		/* XXX -- implement a reverse lookup table for forwarding table entries */
-		data_send_arp(0, sae->ae_tpa, AE_REVREQUEST, state);
+		//data_send_cmd(vxlanid, sae->ae_tpa, AE_REVREQUEST, state);
 
 	}
 	return (0);
@@ -324,8 +338,8 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 		if (ec.ec_flags & EC_TUN) {
 			ip = (struct ip *)(txbuf + sizeof(struct ether_header));
 			uh = (struct udphdr *)(ip + 1);
-			vh = (struct vxlanhdr *)data;
 			data = (uint8_t *)(uh + 1);
+			vh = (struct vxlanhdr *)data;
 			vh->reserved2 = ip->ip_len;
 			ip->ip_len = htons(state->vs_mtu);
 			uh->uh_ulen = htons(state->vs_mtu - sizeof(*ip));
@@ -359,7 +373,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	if (it_ii != intftbl.end()) {
 		vxlanid = it_ii->second->ii_ent.fields.vxlanid;
 	} else {
-		data_send_arp(targetha, 0, AE_VM_VXLANID_REQUEST, state);
+		data_send_cmd(targetha, 0, CMD_VM_INTF_REQUEST, state);
 		/* send request for VXLANID */
 		return (0);
 	}
@@ -385,7 +399,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	 */
 	auto it_ftable = ftablemap->find(vxlanid);
 	if (it_ftable == ftablemap->end()) {
-		data_send_arp(targetha, 0, AE_VM_VXLANID_REQUEST, state);
+		data_send_cmd(targetha, 0, CMD_VM_INTF_REQUEST, state);
 		/* send request for VXLANID */
 		return (0);
 	}
@@ -396,7 +410,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 		raddr = vfe->vfe_raddr.in4.s_addr;
 	} else {
 		/* send RARP for ftable entry */
-		data_send_arp(targetha, 0, AE_REVREQUEST, state);
+		data_send_cmd(targetha, vxlanid, CMD_FTE_REQUEST, state);
 		return (0);
 	}
 	pktsize = ps->ps_rx_len + sizeof(struct vxlan_header) - sizeof(struct ether_header);
@@ -415,7 +429,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 		auto it = l2tbl->find(raddr);
 		if (it == l2tbl->end()) {
 			/* call ARP for L2 addr */
-			data_send_arp(0, raddr, AE_REQUEST, state);
+			data_send_cmd(0, raddr, CMD_ARP_REQUEST, state);
 			return (0);
 		}
 		dstmac = it->second;
@@ -427,7 +441,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 		auto it = l2tbl->find(rte->ri_raddr.in4.s_addr);
 		if (it == l2tbl->end()) {
 			/* call ARP for L2 addr */
-			data_send_arp(0, raddr, AE_REQUEST, state);
+			data_send_cmd(0, raddr, CMD_ARP_REQUEST, state);
 			return (0);
 		}
 		dstmac = it->second;
@@ -459,7 +473,7 @@ vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 }
 
 int
-dtls_decrypt_v4(char *rxbuf, char *txbuf, path_state_t *ps,
+tun_decrypt_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 				vxstate_dp_t *dp_state)
 {
 	struct ip *ip = (struct ip *)(rxbuf + sizeof(struct ether_header));
@@ -470,7 +484,7 @@ dtls_decrypt_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	dp_state->vsd_cipher->decrypt(data);
 	ip->ip_len = vh->reserved2;
 	uh->uh_ulen = htons(ntohs(ip->ip_len) - sizeof(*ip));
-	vxlan_decap_v4(rxbuf, txbuf, ps, dp_state);
+	return vxlan_decap_v4(rxbuf, txbuf, ps, dp_state);
 }
 
 int
@@ -523,7 +537,7 @@ udp_ingress(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
 	switch (dport) {
 		case DTLS_DPORT:
 			/* XXX decrypt */
-			return dtls_decrypt_v4(rxbuf, txbuf, ps, state);
+			return tun_decrypt_v4(rxbuf, txbuf, ps, state);
 			break;
 		case VXLAN_DPORT:
 			return vxlan_decap_v4(rxbuf, txbuf, ps, state);
