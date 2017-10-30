@@ -115,24 +115,6 @@ data_send_arp_phys(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_t *state,
 }
 
 static void
-dhcp_fill(struct dhcp *bp, vxstate_t *state)
-{
-	uint16_t *dstp, *srcp;
-	bzero(bp, sizeof(*bp));
-	bp->bp_op = BOOTREQUEST;
-	bp->bp_htype = HTYPE_ETHERNET;
-	bp->bp_hlen = ETHER_ADDR_LEN;
-	bp->bp_hops = 0;
-	bp->bp_xid = htonl(42); /* magic number :) */
-	srcp = (uint16_t *)&state->vs_ctrl_mac;
-	dstp = (uint16_t *)&bp->bp_chaddr;
-	dstp[0] = srcp[0];
-	dstp[1] = srcp[1];
-	dstp[2] = srcp[2];
-	bp->bp_vendid = htonl(BP_FIXED);
-}
-
-static void
 uvxstat_fill(struct uvxstat *stat, vxstate_t *state)
 {
 	/* XXX -- only supports one datapath */
