@@ -30,6 +30,7 @@
 
 #include <netinet/in.h>
 #include <iostream>
+#include <unordered_map>
 #include <map>
 #include <string>
 #include <set>
@@ -43,7 +44,9 @@
 
 using std::string;
 using std::pair;
+using std::unordered_map;
 using std::map;
+
 #define s6_addr32 __u6_addr.__u6_addr32
 class dtls_channel;
 
@@ -65,10 +68,10 @@ struct in6cmp {
 	}
 };
 
-typedef map<uint32_t, uint64_t> arp_t;
-typedef map<uint64_t, uint32_t> revarp_t;
+typedef unordered_map<uint32_t, uint64_t> arp_t;
+typedef unordered_map<uint64_t, uint32_t> revarp_t;
 typedef map<struct in6_addr, uint64_t, in6cmp> nd6_t;
-typedef map<uint64_t,  struct in6_addr> revnd6_t;
+typedef unordered_map<uint64_t,  struct in6_addr> revnd6_t;
 typedef struct l2_table {
 	arp_t l2t_v4;
 	nd6_t l2t_v6;
@@ -97,7 +100,7 @@ typedef struct intf_info {
 	}
 } intf_info_t;
 
-typedef map<uint64_t, intf_info_t*> intf_info_map_t;
+typedef unordered_map<uint64_t, intf_info_t*> intf_info_map_t;
 typedef pair<uint64_t, uint64_t> u64pair;
 
 typedef union vxlan_in_addr {
@@ -140,9 +143,9 @@ typedef struct routeinfo {
 
 typedef pair<uint64_t, vfe_t> fwdent;
 typedef pair<uint32_t, vre_t> revent;
-typedef map<uint64_t, vfe_t> ftable_t;
-typedef map<uint32_t, vre_t> rtable_t;
-typedef map<uint32_t, ftable_t> ftablemap_t;
+typedef unordered_map<uint64_t, vfe_t> ftable_t;
+typedef unordered_map<uint32_t, vre_t> rtable_t;
+typedef unordered_map<uint32_t, ftable_t> ftablemap_t;
 
 struct uvxstat {
 	uint64_t uvx_egress_rx_pkt;
