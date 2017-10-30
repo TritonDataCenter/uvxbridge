@@ -92,25 +92,25 @@ struct route_configure {
 	uint16_t rc_flags;
 };
 
-#define CMD_OP_NONE			0x0
-#define CMD_ARP_REQUEST		0x1
-#define CMD_ARP_REPLY		0x2
+#define CMD_OP_NONE		0x0
+#define CMD_ARP_REQUEST	0x1		/* request hardware address for IP */
+#define CMD_ARP_REPLY		0x2		/* provide hardware address for IP */
 
-#define CMD_FTE_REQUEST		0x3
-#define CMD_FTE_REPLY		0x4
+#define CMD_FTE_REQUEST	0x3		/* request forwarding address for destination HA */
+#define CMD_FTE_REPLY		0x4		/* provide forwarding address for destination HA */
 
-#define CMD_VM_INTF_REQUEST	0x5
-#define CMD_VM_INTF_REPLY	0x6
+#define CMD_VM_INTF_REQUEST	0x5		/* request vxlanid/vlanid for VM HA */
+#define CMD_VM_INTF_REPLY	0x6		/* provide vxlanid/vlanid for VM HA */
 
-#define CMD_TUN_SERVCONF	0x7
-#define CMD_TUN_CLICONF	0x8
-#define CMD_TUN_QUERY		0x9
+#define CMD_TUN_SERVCONF	0x7		/* provide PSK for this bridge */
+#define CMD_TUN_CLICONF	0x8		/* provide PSK for peer bridge */
+#define CMD_TUN_QUERY		0x9		/* request PSK for this bridge */
 
-#define CMD_ROUTE_CONFIGURE	0xA
-#define CMD_ROUTE_QUERY		0xB
+#define CMD_ROUTE_CONFIGURE	0xA		/* provide route configuration information */
+#define CMD_ROUTE_QUERY	0xB		/* request route configuration information */
 
-#define CMD_IPFW			0xC
-#define CMD_HEARTBEAT		0xD
+#define CMD_IPFW		0xC		/* enclosed payload is IPFW configuration information */
+#define CMD_HEARTBEAT		0xD		/* heartbeat to provisioning agent */
 
 void uvxcmd_fill(char *txbuf, uint64_t smac, uint64_t dmac, uint32_t op);
 
