@@ -96,7 +96,7 @@ udp_fill(struct udphdr *uh, uint16_t sport, uint16_t dport, uint16_t len)
 {
 	uh->uh_sport = htons(sport);
 	uh->uh_dport = htons(dport);
-	uh->uh_ulen = htons(len + sizeof(*uh));
+	uh->uh_ulen = htons(len);
 	uh->uh_sum = 0; /* XXX */
 }
 #endif
