@@ -71,6 +71,7 @@ typedef int (*pkt_dispatch_t)(char *rxbuf, char *txbuf, path_state_t *ps, void *
 typedef struct {
 	char *da_pa_name; /* name of the first netmap port */
 	char *da_pb_name; /* optional name of the second netmap port */
+	ck_epoch_record_t *da_record;
 	struct nm_desc **da_pa; /* pointer to where to store a's nm_desc */
 	struct nm_desc **da_pb; /* pointer to where to store b's nm_desc */
 	pkt_dispatch_t da_rx_dispatch; /* dispatch handler for rx */
@@ -102,8 +103,9 @@ typedef struct {
  * }
  *
  */
-int run_datapath(dp_args_t *port_args, void *arg);
-
+int nmdp_run(dp_args_t *port_args, void *arg);
+void nmdp_init(void);
+ck_epoch_t *nmdp_epoch_get(void);
 #ifdef __cplusplus
 }
 #endif

@@ -40,12 +40,27 @@
 #include <net/netmap_user.h>
 #include <sys/poll.h>
 
+#include <ck_epoch.h>
 #include "datapath.h"
 
 static int verbose = 0;
-
 static int do_abort = 0;
 //static int zerocopy = 1; /* enable zerocopy if possible */
+static ck_epoch_t dp_epoch;
+
+
+void
+nmdp_init(void)
+{
+	ck_epoch_init(&dp_epoch);
+}
+
+ck_epoch_t *
+nmdp_epoch_get(void)
+{
+	return &dp_epoch;
+}
+
 
 static void
 sigint_h(int sig)
@@ -240,7 +255,8 @@ do_tx(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t tx_dispatch, void *
 // pa = host; pb = egress
 static int
 run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t rx_dispatch,
-				  pkt_dispatch_t tx_dispatch, int timeout, int idx __unused, void *arg)
+				  pkt_dispatch_t tx_dispatch, int timeout, int idx __unused,
+				  ck_epoch_record_t *record, void *arg)
 {
     struct pollfd pollfd[2];
     u_int burst = 1024, wait_link = 2;
@@ -326,11 +342,15 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t rx_disp
 			D("error on fd1, rx [%d,%d,%d)",
 			  rx->head, rx->cur, rx->tail);
 		}
+		if (record != NULL)
+			ck_epoch_begin(record, NULL);
 		if (pollfd[0].revents & POLLOUT)
 			move(pb, pa, burst, rx_dispatch, arg, BtoA);
 
 		if (pollfd[1].revents & POLLOUT)
 			move(pa, pb, burst, rx_dispatch, arg, AtoB);
+		if (record != NULL)
+			ck_epoch_end(record, NULL);
 
 		/* We don't need ioctl(NIOCTXSYNC) on the two file descriptors here,
 		 * kernel will txsync on next poll(). */
@@ -339,7 +359,7 @@ run_datapath_priv(struct nm_desc *pa, struct nm_desc *pb, pkt_dispatch_t rx_disp
 }
 
 int
-run_datapath(dp_args_t *port_args, void *arg)
+nmdp_run(dp_args_t *port_args, void *arg)
 {
 
     struct nm_desc *pa, *pb;
@@ -352,12 +372,14 @@ run_datapath(dp_args_t *port_args, void *arg)
 	if (port_args->da_flags & DA_DEBUG)
 		verbose = 1;
 
+	if (port_args->da_record != NULL)
+		ck_epoch_register(&dp_epoch, port_args->da_record, NULL);
 	if (port_args->da_idx != 0) {
 		pa = *port_args->da_pa;
 		pb = *port_args->da_pb;
 		return run_datapath_priv(pa, pb, rx_dispatch, tx_dispatch,
 								 port_args->da_poll_timeout, port_args->da_idx,
-								 arg);
+								 port_args->da_record, arg);
 	}
 
     pa_name = port_args->da_pa_name;
@@ -381,5 +403,6 @@ run_datapath(dp_args_t *port_args, void *arg)
     } else
 		pb = pa;
     return run_datapath_priv(pa, pb, rx_dispatch, tx_dispatch,
-							 port_args->da_poll_timeout, 0, arg);
+							 port_args->da_poll_timeout, 0,
+							 port_args->da_record, arg);
 }
