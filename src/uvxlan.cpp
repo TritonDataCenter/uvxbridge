@@ -294,6 +294,32 @@ ipfw_check(char *buf, uint16_t len, struct netmap_port *src, struct netmap_port 
 	return (1);
 }
 
+
+static void
+tun_encrypt(char *txbuf, std::shared_ptr<Botan::BlockCipher> &cipher, vxstate_t *state)
+{
+	struct ip *ip;
+	struct udphdr *uh;
+	struct vxlanhdr *vh;
+	uint8_t *data;
+	uint32_t timestamp;
+
+	timestamp = state->vs_timestamp;
+	ip = (struct ip *)(txbuf + sizeof(struct ether_header));
+	uh = (struct udphdr *)(ip + 1);
+	data = (uint8_t *)(uh + 1);
+	vh = (struct vxlanhdr *)data;
+	vh->reserved0 = timestamp >> 21;
+	vh->reserved1 = timestamp >> 8;
+	vh->reserved2 = ip->ip_len;
+	vh->reserved3 = timestamp;
+	ip->ip_len = htons(state->vs_mtu);
+	uh->uh_ulen = htons(state->vs_mtu - sizeof(*ip));
+	uh->uh_dport = htons(443);
+	cipher->encrypt_n((const uint8_t *)data, data, state->vs_mtu_blocks);
+	cipher->clear();
+}
+
 /*
  * If valid, encapsulate rxbuf in to txbuf
  *
@@ -310,10 +336,6 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	rte_t *rte = &state->vs_dflt_rte;
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
-	struct vxlanhdr *vh;
-	struct udphdr *uh;
-	struct ip *ip;
-	uint8_t *data;
 	struct egress_cache ec;
 	struct ip_fw_chain *chain;
 	uint64_t srcmac, dstmac, targetha;
@@ -339,17 +361,7 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 		memcpy(txbuf, &dp_state->vsd_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
 		nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
 		if (ec.ec_flags & EC_TUN) {
-			ip = (struct ip *)(txbuf + sizeof(struct ether_header));
-			uh = (struct udphdr *)(ip + 1);
-			data = (uint8_t *)(uh + 1);
-			vh = (struct vxlanhdr *)data;
-			vh->reserved2 = ip->ip_len;
-			ip->ip_len = htons(state->vs_mtu);
-			uh->uh_ulen = htons(state->vs_mtu - sizeof(*ip));
-			uh->uh_dport = htons(443);
-			dp_state->vsd_ecache.ec_cipher->encrypt_n((const uint8_t *)data, data, state->vs_mtu_blocks);
-			dp_state->vsd_ecache.ec_cipher->clear();
-
+			tun_encrypt(txbuf, dp_state->vsd_ecache.ec_cipher, state);
 			*(ps->ps_tx_len) = state->vs_mtu;
 		} else 
 			*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
@@ -461,16 +473,7 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 	/* call encrypted channel */
 	ec.ec_cipher = vfe->vfe_cipher;
 	ec.ec_flags |= EC_TUN;
-	ip = (struct ip *)(txbuf + sizeof(struct ether_header));
-	uh = (struct udphdr *)(ip + 1);
-	data = (uint8_t *)(uh + 1);
-	vh = (struct vxlanhdr *)data;
-	vh->reserved2 = ip->ip_len;
-	ip->ip_len = htons(state->vs_mtu);
-	uh->uh_ulen = htons(state->vs_mtu - sizeof(*ip));
-	uh->uh_dport = htons(443);
-	ec.ec_cipher->encrypt_n((const uint8_t *)data, data, state->vs_mtu_blocks);
-	ec.ec_cipher->clear();
+	tun_encrypt(txbuf, vfe->vfe_cipher, state);
 	*(ps->ps_tx_len) = state->vs_mtu;
 	return (1);
 }
@@ -522,8 +525,16 @@ tun_decrypt_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	struct udphdr *uh = (struct udphdr *)(ip + 1);
 	uint8_t *data = (uint8_t *)(uh + 1);
 	struct vxlanhdr *vh = (struct vxlanhdr *)data;
+	uint32_t timestamp, masked_timestamp;
 
 	dp_state->vsd_cipher->decrypt(data);
+	/* reassemble timestamp from reserved fields */
+	timestamp = (vh->reserved0 << 21) | (vh->reserved1 << 8) | (vh->reserved3);
+	masked_timestamp = dp_state->vsd_state->vs_timestamp & ((1<<25)-1);
+	/* peer timestamp is more than 5 minutes different */
+	if (abs((int)(masked_timestamp - timestamp)) > 3000)
+		return (0);
+
 	ip->ip_len = vh->reserved2;
 	uh->uh_ulen = htons(ntohs(ip->ip_len) - sizeof(*ip));
 	return vxlan_decap_v4(rxbuf, txbuf, ps, dp_state);

@@ -103,8 +103,8 @@
 struct vxlanhdr {
     uint32_t reserved0:4;
     uint32_t v_i:1;
-    uint32_t reserved1:3;
-    uint32_t reserved2:24;
+    uint32_t reserved1:13;
+    uint32_t reserved2:14;
     uint32_t v_vxlanid:24;
     uint32_t reserved3:8;
 } __packed;

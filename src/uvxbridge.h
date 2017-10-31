@@ -202,8 +202,8 @@ typedef struct vxlan_state {
 	uint16_t vs_mtu_blocks;
 	uint16_t vs_min_port;
 	uint16_t vs_max_port;
-	uint16_t vs_pad;
 	uint32_t vs_seed;
+	uint32_t vs_timestamp;
 
 	/*
 	 * Try to keep fields used only for configuration

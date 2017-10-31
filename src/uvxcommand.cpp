@@ -98,10 +98,12 @@ cmd_initiate(char *rxbuf __unused, char *txbuf, path_state_t *ps, void *arg)
 
 	gettimeofday(&tnow, NULL);
 	timersub(&tnow, &state->vs_tlast, &delta);
-	if (delta.tv_sec < 1)
+	if (delta.tv_sec < 1  && delta.tv_usec < 100000)
 		return (0);
+
 	state->vs_tlast.tv_sec = tnow.tv_sec;
 	state->vs_tlast.tv_usec = tnow.tv_usec;
+	state->vs_timestamp = tnow.tv_sec * 10 + tnow.tv_usec / 10000;
 
 	op = (rte->ri_flags & RI_VALID) ? CMD_HEARTBEAT : CMD_ROUTE_QUERY;
 	uvxcmd_fill(txbuf, state->vs_ctrl_mac, state->vs_prov_mac, op, 0, 0);
