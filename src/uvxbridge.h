@@ -237,13 +237,12 @@ typedef struct vxlan_state {
 	/* each data path's state */
 	struct vxlan_state_dp *vs_dp_states[NM_PORT_MAX];
 
-	vxlan_state(uint64_t pmac, uint64_t cmac) {
-		this->vs_prov_mac = pmac;
-		this->vs_ctrl_mac = cmac;
+	vxlan_state(uint64_t pmac, uint64_t cmac, uint64_t hwmac) :
+		vs_prov_mac(pmac),
+		vs_ctrl_mac(cmac),
+		vs_intf_mac(hwmac) {
 		this->vs_nm_ingress = this->vs_nm_egress = NULL;
 		this->vs_tlast.tv_sec = this->vs_tlast.tv_usec = 0;
-		/* XXX GET THE ACTUAL INTERFACE VALUE */
-		this->vs_intf_mac = 0xCAFEBEEFBABE;
 		this->vs_seed = arc4random();
 		this->vs_min_port = IPPORT_HIFIRSTAUTO;	/* 49152 */
 		this->vs_max_port = IPPORT_HILASTAUTO;	/* 65535 */

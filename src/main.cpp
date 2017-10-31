@@ -129,13 +129,13 @@ main(int argc, char *const argv[])
 	int ch;
 	char *ingress, *egress, *config, *log;
 	uint32_t icount, ecount;
-	uint64_t pmac, cmac;
+	uint64_t pmac, cmac, hwmac;
 	vxstate_t *state;
 	dp_args_t cmd_port_args;
 
 	ingress = egress = config = NULL;
-	test = ecount = icount = pmac = cmac = 0;
-	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:d:t:")) != -1) {
+	hwmac = test = ecount = icount = pmac = cmac = 0;
+	while ((ch = getopt(argc, argv, "i:e:c:m:p:l:d:t:h:")) != -1) {
 		switch (ch) {
 			case 'i':
 				ingress = optarg;
@@ -163,6 +163,9 @@ main(int argc, char *const argv[])
 			case 't':
 				test = strtol(optarg, NULL, 10);
 				break;
+			case 'h':
+				hwmac = mac_parse(optarg);
+				break;
 			case '?':
 			default:
 				usage(argv[0]);
@@ -188,12 +191,16 @@ main(int argc, char *const argv[])
 		printf("missing egress netmap interface\n");
 		usage(argv[0]);
 	}
+	if (ingress && egress && !hwmac) {
+		printf("missing egress hw address\n");
+		usage(argv[0]);
+	}
 	if (ingress && egress && !strcmp(ingress, egress)) {
 		printf("egress and ingress can't be the same");
 		usage(argv[0]);
 	}
 
-	state = new vxstate_t(pmac, cmac);
+	state = new vxstate_t(pmac, cmac, hwmac);
 	if (test == 1) {
 		configure_beastie0(state);
 	} else if (test == 2) {
