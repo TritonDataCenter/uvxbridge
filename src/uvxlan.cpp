@@ -52,7 +52,7 @@ extern int debug;
 
 #define AE_REQUEST             0x0100040600080100UL
 #define AE_REPLY               0x0200040600080100UL
-static int vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
+static int vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 						  vxstate_dp_t *dp_state);
 
 
@@ -263,7 +263,7 @@ netmap_enqueue(struct mbuf *m, int proto __unused)
 		return;
 	if (peer->np_dir == AtoB) {
 		ps.ps_rx_len = m->m_len;
-		if (vxlan_encap_v4((char *)m->m_data, txbuf, &ps, peer->np_state))
+		if (vxlan_encap((char *)m->m_data, txbuf, &ps, peer->np_state))
 			txring_next(&ps, *(ps.ps_tx_len));
 	} else {
 		/* XXX --- fragmentation */
@@ -299,7 +299,7 @@ ipfw_check(char *buf, uint16_t len, struct netmap_port *src, struct netmap_port 
  *
  */
 static int
-vxlan_encap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
+vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 			   vxstate_dp_t *dp_state)
 {
 	struct ether_vlan_header *evh;
@@ -572,7 +572,7 @@ ingress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state
 			return udp_ingress(rxbuf, txbuf, ps, state);
 			break;
 		case ETHERTYPE_IPV6:
-			/* not yet supported */
+			/* V6 not currently supported on the underlay */
 			break;
 		default:
 			printf("%s unrecognized packet type %x len: %d\n", __func__, etype, ps->ps_rx_len);
@@ -598,10 +598,8 @@ egress_dispatch(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
 			data_dispatch_arp_vx(rxbuf, txbuf, ps, state);
 			break;
 		case ETHERTYPE_IP:
-			return vxlan_encap_v4(rxbuf, txbuf, ps, state);
-			break;
 		case ETHERTYPE_IPV6:
-			/* not yet supported */
+			return vxlan_encap(rxbuf, txbuf, ps, state);
 			break;
 		default:
 			printf("%s unrecognized packet type %x len: %d\n", __func__, etype, ps->ps_rx_len);
