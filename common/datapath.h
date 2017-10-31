@@ -23,6 +23,7 @@ typedef struct {
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include <ck_epoch.h>
 
 /*
  * PUBLIC - more general interface to netmap below:
