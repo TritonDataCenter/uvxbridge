@@ -1,5 +1,6 @@
 # uvxbridge
 user level vxlan bridge and firewall
+NB: Depends on Botan2 and CK https://github.com/mattmacy/ck
 
 uvxbridge -i \<ingress\> -e \<egress\> -c \<config\> -m \<config mac address\> -p \<provisioning agent mac address\> [-d]
 
