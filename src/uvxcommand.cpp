@@ -123,12 +123,8 @@ cmd_initiate(char *rxbuf __unused, char *txbuf, path_state_t *ps, void *arg)
 		oldstate = state->vs_dp_states[0]->vsd_state;
 		for (int i = 0; i < dp_count; i++)
 			state->vs_dp_states[i]->vsd_state = newstate;
-		/* XXX --- clunky LOLEBR --- sleep for 50ms before freeing */
-		if (__predict_true(debug == 0)) {
-			usleep(50000);
-			if (__predict_false(oldstate != state))
-				delete oldstate;
-		}
+		ck_epoch_barrier(&state->vs_record);
+		delete oldstate;
 	}
 	return (count);
 }
@@ -398,10 +394,12 @@ cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 			break;
 		case CMD_TUN_SERVCONF: {
 			struct tun_configure_server *tcs = (struct tun_configure_server *)rxdata;
-			int dp_count = state->vs_datapath_count;
 			std::shared_ptr<Botan::BlockCipher> old_ciphers[NM_PORT_MAX], ciphers[NM_PORT_MAX];
+			int dp_count = state->vs_datapath_count;
 			int i;
 
+			if (dp_count == 0)
+				break;
 			for (i = 0; i < dp_count; i++)
 				ciphers[i] = Botan::BlockCipher::create("AES-128");
 			if (i != dp_count) {
@@ -413,8 +411,7 @@ cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 				old_ciphers[i] = state->vs_dp_states[i]->vsd_cipher;
 				state->vs_dp_states[i]->vsd_cipher = ciphers[i];
 			}
-			/* XXX more LOLEBR --- fix */
-			usleep(50000);
+			ck_epoch_barrier(&state->vs_record);
 		}
 			break;
 		case CMD_TUN_CLICONF: {
@@ -453,8 +450,7 @@ cmd_dispatch_config(char *rxbuf, char *txbuf, path_state_t *ps, void *arg)
 				vfe_it->second.vfe_cipher = cipher;
 				vfe_it->second.vfe_encrypt = 1;
 			}
-			/* XXX LOLEBR - wait some time before letting remaining reference go out scope */
-			usleep(50000);
+			ck_epoch_barrier(&state->vs_record);
 		}
 			break;
 		case CMD_TUN_QUERY:

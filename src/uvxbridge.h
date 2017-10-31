@@ -229,6 +229,9 @@ typedef struct vxlan_state {
 	/* the last time *_initiate was executed */
 	struct timeval vs_tlast;
 
+	/* EBR record */
+	ck_epoch_record_t vs_record;
+
 	/* configuration netmap descriptor */
 	struct nm_desc *vs_nm_config;
 
@@ -260,6 +263,9 @@ struct netmap_port {
 
 typedef struct vxlan_state_dp {
 	vxstate_t *vsd_state;
+
+	/* EBR record */
+	ck_epoch_record_t vsd_record;
 
 	/* server channel */
 	std::shared_ptr<Botan::BlockCipher> vsd_cipher;

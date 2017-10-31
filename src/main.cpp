@@ -84,7 +84,7 @@ datapath_thr(void *args)
 	struct dp_thr_args *dargs = (struct dp_thr_args *)args;
 
 	atomic_add_int(&dargs->config_state->vs_datapath_count, 1);
-	run_datapath(dargs->port_args, dargs->self_state);
+	nmdp_run(dargs->port_args, dargs->self_state);
 	return (NULL);
 }
 
@@ -111,6 +111,7 @@ start_datapath(char *ingress, char *egress, vxstate_t *state, int idx)
 	data_port_args->da_pb = &state->vs_nm_egress;
 	data_port_args->da_rx_dispatch = data_dispatch;
 	data_port_args->da_poll_timeout = 1000;
+	data_port_args->da_record = &data_state->vsd_record;
 	if (debug)
 		data_port_args->da_flags = DA_DEBUG;
 	data_port_args->da_idx = idx;
@@ -200,7 +201,10 @@ main(int argc, char *const argv[])
 		usage(argv[0]);
 	}
 
+	/* do any global datapath init first */
+	nmdp_init();
 	state = new vxstate_t(pmac, cmac, hwmac);
+	ck_epoch_register(nmdp_epoch_get(), &state->vs_record, NULL);
 	if (test == 1) {
 		configure_beastie0(state);
 	} else if (test == 2) {
@@ -225,7 +229,7 @@ main(int argc, char *const argv[])
 	cmd_port_args.da_poll_timeout = 1000;
 
 	printf("ctrl_mac: %lx\n", state->vs_ctrl_mac);
-	run_datapath(&cmd_port_args, state);
+	nmdp_run(&cmd_port_args, state);
 
 	return 0;
 }
