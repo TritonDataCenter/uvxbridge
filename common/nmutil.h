@@ -83,7 +83,7 @@ ip_fill(struct ip *ip, uint32_t sip, uint32_t dip, uint16_t len, uint8_t proto)
 	ip->ip_len = htons(len);
 	ip->ip_id = 0;
 	ip->ip_off = htons(IP_DF);
-	ip->ip_ttl = 1;
+	ip->ip_ttl = 255;
 	ip->ip_p = proto;
 	ip->ip_sum = 0; /* XXX */
 	/* these should always be kept in network byte order (BE) */
