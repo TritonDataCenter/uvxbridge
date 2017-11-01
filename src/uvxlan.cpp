@@ -379,6 +379,7 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 	ec.ec_smac = srcmac;
 	ec.ec_dmac = dstmac;
 	ec.ec_chain = NULL;
+	pktsize = ps->ps_rx_len + sizeof(struct vxlan_header);
 	/* fill out final data -- XXX assume no VLAN */
 	*((uint64_t *)(uintptr_t)&ec.ec_hdr.vh.vh_vxlanhdr) = 0;
 	ec.ec_hdr.vh.vh_vxlanhdr.v_i = 1;
@@ -406,9 +407,8 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 	range = state->vs_max_port - state->vs_min_port + 1;
 	sport = XXH32(rxbuf, ETHER_HDR_LEN, state->vs_seed) % range;
 	sport += state->vs_min_port;
-	pktsize = ps->ps_rx_len + sizeof(struct vxlan_header) -
-		sizeof(struct ether_header) - sizeof(struct ip);
-	udp_fill((struct udphdr *)(uintptr_t)&ec.ec_hdr.vh.vh_udphdr, sport, VXLAN_DPORT, pktsize);
+	udp_fill(&ec.ec_hdr.vh.vh_udphdr, sport, VXLAN_DPORT,
+			 pktsize - sizeof(struct ether_header) - sizeof(struct ip));
 
 	/* next map evh->evl_dhost -> remote ip addr in the
 	 * corresponding forwarding table - check vs_ftable
@@ -430,9 +430,8 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 		data_send_cmd(targetha, vxlanid, CMD_FTE_REQUEST, state);
 		return (0);
 	}
-	pktsize = ps->ps_rx_len + sizeof(struct vxlan_header) - sizeof(struct ether_header);
-	ip_fill((struct ip *)(uintptr_t)&ec.ec_hdr.vh.vh_iphdr, laddr, raddr,
-			pktsize, IPPROTO_UDP);
+	ip_fill(&ec.ec_hdr.vh.vh_iphdr, laddr, raddr,
+			pktsize - sizeof(struct ether_header), IPPROTO_UDP);
 
 	/* ..... */
 	/* next check if remote ip is on our local subnet
@@ -469,7 +468,7 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 	nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
 
 	if (!vfe->vfe_encrypt) {
-		*(ps->ps_tx_len) = ps->ps_rx_len + sizeof(struct vxlan_header);
+		*(ps->ps_tx_len) = pktsize;
 		return (1);
 	}
 	/* call encrypted channel */
@@ -492,8 +491,17 @@ vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	vxstate_t *state = dp_state->vsd_state;
 	intf_info_map_t &intftbl = state->vs_intf_table;
 	uint16_t pktlen;
+#if 0
+	/* this check doesn't work */
+	uint16_t iplen = ntohs(ip->ip_len);
+	pktlen = min(ps->ps_rx_len, iplen + sizeof(*eh));
+	if (iplen + sizeof(*eh) != ps->ps_rx_len) {
+		printf("header len mismatch rx_len: %d iplen: %d\n",
+			   ps->ps_rx_len, iplen + sizeof(*eh));
+	}
+#endif	
+	pktlen = ps->ps_rx_len;
 
-	pktlen = min(ps->ps_rx_len,  ntohs(ip->ip_len) + sizeof(*eh));
 	if (__predict_false(pktlen <= sizeof(struct vxlan_header)))
 		return (0);
 
