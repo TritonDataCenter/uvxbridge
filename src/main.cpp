@@ -110,7 +110,7 @@ start_datapath(char *ingress, char *egress, vxstate_t *state, int idx)
 	data_port_args->da_pa = &state->vs_nm_ingress;
 	data_port_args->da_pb = &state->vs_nm_egress;
 	data_port_args->da_rx_dispatch = data_dispatch;
-	data_port_args->da_poll_timeout = 100;
+	data_port_args->da_poll_timeout = 1500;
 	data_port_args->da_record = &data_state->vsd_record;
 	if (debug)
 		data_port_args->da_flags = DA_DEBUG;
@@ -226,7 +226,7 @@ main(int argc, char *const argv[])
 	cmd_port_args.da_pa = &state->vs_nm_config;
 	cmd_port_args.da_rx_dispatch = cmd_dispatch_config;
 	cmd_port_args.da_tx_dispatch = cmd_initiate;
-	cmd_port_args.da_poll_timeout = 1000;
+	cmd_port_args.da_poll_timeout = 100;
 
 	printf("ctrl_mac: %lx\n", state->vs_ctrl_mac);
 	nmdp_run(&cmd_port_args, state);
