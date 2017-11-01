@@ -545,7 +545,7 @@ udp_ingress(char *rxbuf, char *txbuf, path_state_t *ps, vxstate_dp_t *state)
 {
 	struct ether_header *eh = (struct ether_header *)rxbuf;
 	struct ip *ip = (struct ip *)(uintptr_t)(eh + 1);
-	struct udphdr *uh = (struct udphdr *)(ip + (ip->ip_hl << 2));
+	struct udphdr *uh = (struct udphdr *)(ip + 1);
 	uint16_t dport = ntohs(uh->uh_dport);
 
 	switch (dport) {
