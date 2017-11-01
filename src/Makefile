@@ -6,7 +6,7 @@ LDADD= -L../kipfw -lkipfw -L/usr/local/lib -lbotan-2 \
 	-L${.CURDIR}/../common -lnmutil \
 	-L/usr/local/lib -lck
 LDFLAGS+=-pthread
-CFLAGS+= -Wno-cast-align -Wno-address-of-packed-member
+CFLAGS+= -Wno-cast-align -Wno-address-of-packed-member -O0
 CFLAGS+= -DUSERSPACE -DINET -D_BSD_SOURCE -D_DEFAULT_SOURCE $(INCDIRS)
 CFLAGS+= -I${.CURDIR}/../kipfw/extra -I/usr/local/include/botan-2
 CFLAGS+= -I${.CURDIR}/../common -I/usr/local/include

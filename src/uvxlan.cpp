@@ -336,7 +336,7 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 	ftablemap_t *ftablemap = &state->vs_ftables;
 	rte_t *rte = &state->vs_dflt_rte;
 	arp_t *l2tbl = &state->vs_l2_phys.l2t_v4;
-	struct egress_cache ec;
+	struct egress_cache ec, *ecp;
 	struct ip_fw_chain *chain;
 	uint64_t srcmac, dstmac, targetha;
 	uint16_t sport, pktsize;
@@ -350,7 +350,8 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 		return (0);
 	if (dp_state->vsd_ecache.ec_smac == srcmac &&
 		dp_state->vsd_ecache.ec_dmac == dstmac) {
-		chain = dp_state->vsd_ecache.ec_chain;
+		ecp = &dp_state->vsd_ecache;
+		chain = ecp->ec_chain;
 		if (chain != NULL) {
 			/* XXX do ipfw_check on packet */
 			if (ipfw_check(rxbuf, ps->ps_rx_len, &dp_state->vsd_ingress_port,
@@ -360,7 +361,7 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 		/* XXX VLAN only */
 		memcpy(txbuf, &dp_state->vsd_ecache.ec_hdr.vh, sizeof(struct vxlan_header));
 		nm_pkt_copy(rxbuf, txbuf + sizeof(struct vxlan_header), ps->ps_rx_len);
-		if (ec.ec_flags & EC_TUN) {
+		if (ecp->ec_flags & EC_TUN) {
 			tun_encrypt(txbuf, dp_state->vsd_ecache.ec_cipher, state);
 			*(ps->ps_tx_len) = state->vs_mtu;
 		} else 
@@ -374,6 +375,7 @@ vxlan_encap(char *rxbuf, char *txbuf, path_state_t *ps,
 		hdrlen = ETHER_HDR_LEN;
 		etype = ntohs(evh->evl_encap_proto);
 	}
+	ec.ec_flags = 0;
 	ec.ec_smac = srcmac;
 	ec.ec_dmac = dstmac;
 	ec.ec_chain = NULL;
@@ -491,7 +493,7 @@ vxlan_decap_v4(char *rxbuf, char *txbuf, path_state_t *ps,
 	intf_info_map_t &intftbl = state->vs_intf_table;
 	uint16_t pktlen;
 
-	pktlen = min(ps->ps_rx_len,  ntohs(ip->ip_len));
+	pktlen = min(ps->ps_rx_len,  ntohs(ip->ip_len) + sizeof(*eh));
 	if (__predict_false(pktlen <= sizeof(struct vxlan_header)))
 		return (0);
 
