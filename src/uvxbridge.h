@@ -36,6 +36,7 @@
 #include <set>
 #include <memory>
 #include "proto.h"
+#include <signal.h>
 
 #include <ipfw_exports.h>
 #include "datapath.h"
@@ -147,15 +148,25 @@ typedef unordered_map<uint64_t, vfe_t> ftable_t;
 typedef unordered_map<uint32_t, vre_t> rtable_t;
 typedef unordered_map<uint32_t, ftable_t> ftablemap_t;
 
+extern volatile sig_atomic_t info;
+
 struct uvxstat {
 	uint64_t uvx_egress_rx_pkt;
 	uint64_t uvx_egress_tx_pkt;
-	uint64_t uvx_ingress_rx_pkt;
-	uint64_t uvx_ingress_tx_pkt;
 	uint64_t uvx_egress_rx_bytes;
 	uint64_t uvx_egress_tx_bytes;
+	uint64_t uvx_egress_rx_invl_pkt;
+	uint64_t uvx_egress_tx_invl_pkt;
+	uint64_t uvx_egress_rx_invl_bytes;
+	uint64_t uvx_egress_tx_invl_bytes;
+	uint64_t uvx_ingress_rx_pkt;
+	uint64_t uvx_ingress_tx_pkt;
 	uint64_t uvx_ingress_rx_bytes;
 	uint64_t uvx_ingress_tx_bytes;
+	uint64_t uvx_ingress_rx_invl_pkt;
+	uint64_t uvx_ingress_tx_invl_pkt;
+	uint64_t uvx_ingress_rx_invl_bytes;
+	uint64_t uvx_ingress_tx_invl_bytes;
 };
 
 #define EC_VLAN 0x01

@@ -38,6 +38,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include "uvxbridge.h"
 #include "uvxlan.h"
@@ -47,12 +48,19 @@
 
 int debug;
 int test;
+volatile sig_atomic_t info;
 
 static void
 usage(char *name)
 {
 	printf("usage %s -i <ingress> -e <egress> -c <config> -m <config mac address> -p <provisioning agent mac address> [-d <level>]\n", name);
 	exit(1);
+}
+
+static void
+siginfo(int sig __unused)
+{
+	info = 1;
 }
 
 static uint64_t
@@ -200,6 +208,7 @@ main(int argc, char *const argv[])
 		printf("egress and ingress can't be the same");
 		usage(argv[0]);
 	}
+	(void)signal(SIGINFO, siginfo);
 
 	/* do any global datapath init first */
 	nmdp_init();
